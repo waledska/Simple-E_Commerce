@@ -5,38 +5,30 @@ namespace SimpleECommerce.Services
 {
     public interface ICartOrdersService
     {
-        // what you need to make finally!
-        /*
+        // cartRow[C R U D]
+        //[forUser]
+        Task<string> addItemToMyCartAsync(addItemToCartModel model);
+        Task<List<CartRow>> getMyCartItemsAsync();
+        Task<string> updateItemQuantityInCartAsync(addItemToCartModel model);
+        Task<string> DeleteItemFromCartAsync(int ItemId);
 
-        1- You ‘ll remove table Cart
-        2- cartRow[C R U D]
-            addProdToMyCart({prodVariationId, Quantity})
-            getMyCart
-            updateProdQuantityInCart
-            DeleteProdFromCart
+        // // orders[C R U D]
+        // //[ForUser]
+        Task<string> cartCheckOutAsync(int addressId);
+        Task<string> buyProdAsync(buyProdRequestModel model);
+        Task<List<orderWithOutDetails>> GetMyOrdersAsync(); // in the client chould make filterationBy orderStatus
+        Task<Order> GetOrderDetailsAsync(int orderId);
+        Task<string> deleteOrderbyUserAsync(int orderId); // [In 8 h]
 
-        3- orders[C R U D]
-            makeOrder
-            GetMyOrders
-	        GetOrderDetails
-            deleteOrder[In 8 h]
-            [Admin]GetAllUsersOrders(filteration by Users/orderStatus/Order/PhoneNumber/UserName)
-            [Admin]changeOrderStatus
-	        [Admin]deleteOrder
-
-        */
-        //////////////
-        // cartRow [C U D]
-
-
-        // GetMyCart
-
-        // OrderRow [C U D]
-
-        // GetMyOrders
-
-        // GetAllOrdersForAdmin
+        //[ForAdmin]
+        Task<List<orderWithOutDetails>> GetAllUsersOrdersAsync(string userId = null,
+                                                                string orderStatus = null,
+                                                                int? orderId = null,
+                                                                string phoneNumber = null,
+                                                                string userName = null);
 
 
+        Task<string> updateOrderStatusAsync(updateOrderStatus model);
+        Task<string> deleteOrderbyAdminAsync(int orderId);
     }
 }

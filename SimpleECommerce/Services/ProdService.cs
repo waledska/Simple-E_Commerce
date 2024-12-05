@@ -136,69 +136,85 @@ namespace SimpleECommerce.Services
 
         public async Task<bool> DeleteProductAsync(int productId)
         {
-            // Find the product
-            var product = await _dbContext.Products.FindAsync(productId);
-            if (product == null)
-                return false;
+            // first i need to modify to move column mainProdVarPhoto from orders to ProdVariations
 
-            // Check if any order exists for this product's variations
-            bool productHasOrders = await _dbContext.OrderRows
-                .AnyAsync(or => or.ProductVariation.ProductId == productId);
+            // there is two cases: 
+            // first product there is orders or in cart for this product(ProductVariation assigned to old order or cart row) => you should soft delete the assigned variation and delete all images only ignore main images for soft deleted variations and product and hard delete for other variaitons those doesn't assigned and delete all thiere photos also
+            // there is no orders or not assigned in any cart for this product physical delete for ProdVariaitons and Product and images for this Product
 
-            // If the product has orders, set `isDeleted = true` for the product
-            if (productHasOrders)
-            {
-                product.isDeleted = true;
-            }
-            else
-            {
-                // Get all product variations for this product
-                var productVariations = await _dbContext.ProductVariations
-                    .Where(v => v.ProductId == productId)
-                    .ToListAsync();
 
-                // Get the paths of photos that should not be deleted (referenced in OrderRows)
-                var photosPathsNotAllowedToDelete = await _dbContext.OrderRows
-                    .Select(or => or.MainProductVariationPhoto)
-                    .ToListAsync();
+            // check this product is variations has any orders??
 
-                // Loop through each product variation
-                foreach (var variation in productVariations)
-                {
-                    // Check if the variation has any associated orders
-                    bool variationHasOrders = await _dbContext.OrderRows
-                        .AnyAsync(or => or.ProductVariationId == variation.Id);
 
-                    // If the variation has orders, set `isDeleted = true`
-                    if (variationHasOrders)
-                    {
-                        variation.isDeleted = true;
-                    }
-                    else
-                    {
-                        // Get all photos for this variation that are not referenced in orders
-                        var photosToDelete = await _dbContext.Photos
-                            .Where(p => p.ProductVariationId == variation.Id && !photosPathsNotAllowedToDelete.Contains(p.Path))
-                            .ToListAsync();
 
-                        // Delete the photo files and mark the photo entities for deletion
-                        foreach (var photo in photosToDelete)
-                        {
-                            _transferPhotosToPath.DeleteFile(photo.Path);
-                            _dbContext.Photos.Remove(photo);
-                        }
-
-                        // Mark the variation for deletion (soft delete)
-                        variation.isDeleted = true;
-                    }
-                }
-                _dbContext.Products.Remove(product);
-            }
-
-            // Save changes to the database
-            await _dbContext.SaveChangesAsync();
             return true;
         }
+
+        // public async Task<bool> DeleteProductAsync(int productId)
+        // {
+        //     // Find the product
+        //     var product = await _dbContext.Products.FindAsync(productId);
+        //     if (product == null)
+        //         return false;
+
+        //     // Check if any order exists for this product's variations
+        //     bool productHasOrders = await _dbContext.OrderRows
+        //         .AnyAsync(or => or.ProductVariation.ProductId == productId);
+
+        //     // If the product has orders, set `isDeleted = true` for the product
+        //     if (productHasOrders)
+        //     {
+        //         product.isDeleted = true;
+        //     }
+        //     else
+        //     {
+        //         // Get all product variations for this product
+        //         var productVariations = await _dbContext.ProductVariations
+        //             .Where(v => v.ProductId == productId)
+        //             .ToListAsync();
+
+        //         // Get the paths of photos that should not be deleted (referenced in OrderRows)
+        //         var photosPathsNotAllowedToDelete = await _dbContext.OrderRows
+        //             .Select(or => or.MainProductVariationPhoto)
+        //             .ToListAsync();
+
+        //         // Loop through each product variation
+        //         foreach (var variation in productVariations)
+        //         {
+        //             // Check if the variation has any associated orders
+        //             bool variationHasOrders = await _dbContext.OrderRows
+        //                 .AnyAsync(or => or.ProductVariationId == variation.Id);
+
+        //             // If the variation has orders, set `isDeleted = true`
+        //             if (variationHasOrders)
+        //             {
+        //                 variation.isDeleted = true;
+        //             }
+        //             else
+        //             {
+        //                 // Get all photos for this variation that are not referenced in orders
+        //                 var photosToDelete = await _dbContext.Photos
+        //                     .Where(p => p.ProductVariationId == variation.Id && !photosPathsNotAllowedToDelete.Contains(p.Path))
+        //                     .ToListAsync();
+
+        //                 // Delete the photo files and mark the photo entities for deletion
+        //                 foreach (var photo in photosToDelete)
+        //                 {
+        //                     _transferPhotosToPath.DeleteFile(photo.Path);
+        //                     _dbContext.Photos.Remove(photo);
+        //                 }
+
+        //                 // Mark the variation for deletion (soft delete)
+        //                 variation.isDeleted = true;
+        //             }
+        //         }
+        //         _dbContext.Products.Remove(product);
+        //     }
+
+        //     // Save changes to the database
+        //     await _dbContext.SaveChangesAsync();
+        //     return true;
+        // }
 
 
 

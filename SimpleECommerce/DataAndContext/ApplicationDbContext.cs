@@ -14,7 +14,6 @@ namespace SimpleECommerce.DataAndContext
         }
         // adding dbsets for the new tables that we will insert in this identity context 
         public virtual DbSet<Address> Addresses { get; set; } = null!;
-        public virtual DbSet<Cart> Carts { get; set; } = null!;
         public virtual DbSet<CartRow> CartRows { get; set; } = null!;
         public virtual DbSet<Color> Colors { get; set; } = null!;
         public virtual DbSet<EmailOtp> emailOtps { get; set; } = null!;
@@ -77,32 +76,19 @@ namespace SimpleECommerce.DataAndContext
                 entity.Property(e => e.UserId).HasColumnName("userId");
             });
 
-            modelBuilder.Entity<Cart>(entity =>
-            {
-                entity.ToTable("Cart");
-
-                entity.Property(e => e.Id).HasColumnName("id");
-
-                entity.Property(e => e.UserId).HasColumnName("userId");
-            });
-
             modelBuilder.Entity<CartRow>(entity =>
             {
                 entity.ToTable("CartRow");
 
-                entity.Property(e => e.Id).HasColumnName("id");
+                entity.Property(e => e.Id)
+                .HasMaxLength(255)
+                .HasColumnName("id");
 
-                entity.Property(e => e.CartId).HasColumnName("cartId");
+                entity.Property(e => e.UserId).HasColumnName("userId");
 
                 entity.Property(e => e.ProductVariationId).HasColumnName("productVariationId");
 
                 entity.Property(e => e.Quantity).HasColumnName("quantity");
-
-                entity.HasOne(d => d.Cart)
-                    .WithMany(p => p.CartRows)
-                    .HasForeignKey(d => d.CartId)
-                    .OnDelete(DeleteBehavior.ClientSetNull)
-                    .HasConstraintName("FK__CartRow__cartId__45F365D3");
 
                 entity.HasOne(d => d.ProductVariation)
                     .WithMany(p => p.CartRows)
