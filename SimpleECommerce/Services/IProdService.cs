@@ -16,6 +16,7 @@ namespace SimpleECommerce.Services
         Task<IEnumerable<ProductResponseModel>> ShowProductsAsync();
         Task<ProductResponseModel> UpdateProductAsync(int productId, ProductRequestModel model);
         Task<bool> DeleteProductAsync(int productId);
+        Task<string> ReactivateProductAsync(int productId);
 
         // Product Variation (CRUD)
         Task<ProductVariationResponseModel> AddVariationForProdAsync(int productId, ProductVariationRequestModel model);

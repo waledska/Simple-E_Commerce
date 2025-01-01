@@ -8,7 +8,8 @@ namespace SimpleECommerce.Services
     public class TransferPhotosToPathWithStoreService : ITransferPhotosToPathWithStoreService
     {
         // Upload a single image
-        public string GetPhotoPath(IFormFile model)
+        /// <inheritdoc />
+        public async Task<string> GetPhotoPathAsync(IFormFile model)
         {
             if (model == null || model.Length == 0)
                 return "error, IFormFile model can't be empty";
@@ -49,7 +50,7 @@ namespace SimpleECommerce.Services
                 // Save the image
                 using (var fileStream = new FileStream(fullPath, FileMode.Create))
                 {
-                    model.CopyTo(fileStream);
+                    await model.CopyToAsync(fileStream);
                 }
 
                 return fullPath;
@@ -61,7 +62,8 @@ namespace SimpleECommerce.Services
         }
 
         // Upload multiple images
-        public List<string> GetPhotosPath(List<IFormFile> model)
+        /// <inheritdoc />
+        public async Task<List<string>> GetPhotosPathAsync(List<IFormFile> model)
         {
             var resultPaths = new List<string>();
             if (model == null || !model.Any())
@@ -95,24 +97,6 @@ namespace SimpleECommerce.Services
                     continue;
                 }
 
-                // if you want to valid that all images in square dimention
-                // try
-                // {
-                //     using (var image = Image.Load(file.OpenReadStream(), out IImageFormat format))
-                //     {
-                //         if (image.Width != image.Height)
-                //         {
-                //             resultPaths.Add("error, image is not square");
-                //             continue;
-                //         }
-                //     }
-                // }
-                // catch (Exception)
-                // {
-                //     resultPaths.Add("error, invalid image file");
-                //     continue;
-                // }
-
                 string uniquePhotoName = Guid.NewGuid() + fileExtension;
                 var fullPath = Path.Combine(Directory.GetCurrentDirectory(), imagesFolderName, uniquePhotoName);
 
@@ -120,7 +104,7 @@ namespace SimpleECommerce.Services
                 {
                     using (var fileStream = new FileStream(fullPath, FileMode.Create))
                     {
-                        file.CopyTo(fileStream);
+                        await file.CopyToAsync(fileStream);
                     }
 
                     resultPaths.Add(fullPath);
@@ -130,21 +114,19 @@ namespace SimpleECommerce.Services
                     resultPaths.Add("error, something went wrong!");
                 }
             }
-
-            // if (!resultPaths.Any(path => path.StartsWith("error")))
-            //     resultPaths.Add("success");
-
             return resultPaths;
         }
 
         // Delete a file
-        public bool DeleteFile(string path)
+        /// <inheritdoc />
+        public async Task<bool> DeleteFileAsync(string path)
         {
             if (File.Exists(path))
             {
                 try
                 {
-                    File.Delete(path);
+                    // Perform the file deletion on a background thread to avoid blocking
+                    await Task.Run(() => File.Delete(path));
                     return true;
                 }
                 catch (Exception ex)

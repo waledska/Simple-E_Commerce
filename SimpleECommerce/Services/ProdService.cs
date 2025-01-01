@@ -2,7 +2,9 @@ using SimpleECommerce.vModels;
 using SimpleECommerce.DataAndContext;
 using SimpleECommerce.DataAndContext.ModelsForEommerce;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using System.Diagnostics.CodeAnalysis;
+
 
 namespace SimpleECommerce.Services
 {
@@ -10,11 +12,13 @@ namespace SimpleECommerce.Services
     {
         private readonly ITransferPhotosToPathWithStoreService _transferPhotosToPath;
         private readonly ApplicationDbContext _dbContext;
+        private readonly ILogger<ProdService> _logger;
 
-        public ProdService(ITransferPhotosToPathWithStoreService transferPhoto, ApplicationDbContext dbContext)
+        public ProdService(ITransferPhotosToPathWithStoreService transferPhoto, ApplicationDbContext dbContext, ILogger<ProdService> logger)
         {
             _transferPhotosToPath = transferPhoto;
             _dbContext = dbContext;
+            _logger = logger;
         }
 
         public async Task<CategoryModel> CreateCategoryAsync(string value)
@@ -104,13 +108,13 @@ namespace SimpleECommerce.Services
         public async Task<IEnumerable<ProductResponseModel>> ShowProductsAsync()
         {
             var products = await _dbContext.Products
-                .Where(p => !p.isDeleted) // Exclude deleted products
+                //.Where(p => !p.isDeleted) // Exclude deleted products
                 .Include(p => p.Category)
-                .Include(p => p.ProductVariations.Where(v => !v.isDeleted)) // Exclude deleted variations
+                .Include(p => p.ProductVariations/*.Where(v => !v.isDeleted)*/) // Exclude deleted variations
                 .ThenInclude(v => v.Color)
-                .Include(p => p.ProductVariations.Where(v => !v.isDeleted))
+                .Include(p => p.ProductVariations/*.Where(v => !v.isDeleted)*/)
                 .ThenInclude(v => v.Size)
-                .ToListAsync();
+                .AsNoTracking().ToListAsync();
 
             return products.Select(MapToProductResponse);
         }
@@ -133,94 +137,148 @@ namespace SimpleECommerce.Services
             return await GetProductByIdAsync(productId);
         }
 
-
+        /// <summary>
+        /// Deletes a product either softly or hard based on its associations with orders or carts.
+        /// </summary>
+        /// <param name="productId">The ID of the product to delete.</param>
+        /// <returns>True if the deletion was successful; otherwise, false.</returns>
         public async Task<bool> DeleteProductAsync(int productId)
         {
-            // first i need to modify to move column mainProdVarPhoto from orders to ProdVariations
+            var photosToDelete = new List<Photo>();
+            // Begin a database transaction to ensure atomicity
+            using var transaction = await _dbContext.Database.BeginTransactionAsync();
+            try
+            {
+                // Fetch the product with its variations and photos
+                var currentProduct = await _dbContext.Products
+                    .Include(p => p.ProductVariations)
+                        .ThenInclude(pv => pv.Photos)
+                    .FirstOrDefaultAsync(p => p.Id == productId);
 
-            // there is two cases: 
-            // first product there is orders or in cart for this product(ProductVariation assigned to old order or cart row) => you should soft delete the assigned variation and delete all images only ignore main images for soft deleted variations and product and hard delete for other variaitons those doesn't assigned and delete all thiere photos also
-            // there is no orders or not assigned in any cart for this product physical delete for ProdVariaitons and Product and images for this Product
+                // If the product doesn't exist, return false
+                if (currentProduct == null)
+                    return false;
 
+                // Get all variation IDs for the product
+                var productVarIds = currentProduct.ProductVariations.Select(pv => pv.Id).ToList();
 
-            // check this product is variations has any orders??
+                // Find all variation IDs assigned to any order or cart
+                var assignedVariationsIds = await _dbContext.OrderRows
+                    .Where(or => productVarIds.Contains(or.ProductVariationId))
+                    .Select(or => or.ProductVariationId)
+                    .Distinct()
+                    .Union(
+                        _dbContext.CartRows
+                            .Where(cr => productVarIds.Contains(cr.ProductVariationId))
+                            .Select(cr => cr.ProductVariationId)
+                    )
+                    .ToListAsync();
 
+                bool anyAssigned = assignedVariationsIds.Any();
 
+                if (anyAssigned)
+                {
+                    // Soft delete assigned variations and hard delete unassigned variations
+                    foreach (var variation in currentProduct.ProductVariations)
+                    {
+                        if (assignedVariationsIds.Contains(variation.Id))
+                        {
+                            // Soft delete the variation
+                            variation.isDeleted = true;
 
+                            // Identify photos to delete (excluding the main photo)
+                            photosToDelete = variation.Photos
+                                .Where(ph => ph.Path != variation.MainProductVariationPhoto)
+                                .ToList();
+
+                            // Remove photos from the database
+                            _dbContext.Photos.RemoveRange(photosToDelete);
+                        }
+                        else
+                        {
+                            // Hard delete the variation and all its photos
+                            photosToDelete = variation.Photos.ToList();
+
+                            _dbContext.Photos.RemoveRange(photosToDelete);
+
+                            _dbContext.ProductVariations.Remove(variation);
+                        }
+                    }
+
+                    // Soft delete the product
+                    currentProduct.isDeleted = true;
+                }
+                else
+                {
+                    // No variations are assigned; perform a hard delete => hard delete for product and it's variations
+
+                    // Collect all photos associated with the product's variations
+                    photosToDelete = currentProduct.ProductVariations
+                        .SelectMany(pv => pv.Photos)
+                        .ToList();
+
+                    // Remove photos from the database
+                    _dbContext.Photos.RemoveRange(photosToDelete);
+                    // Remove all variations
+                    _dbContext.ProductVariations.RemoveRange(currentProduct.ProductVariations);
+
+                    // Remove the product
+                    _dbContext.Products.Remove(currentProduct);
+                }
+
+                // Save all changes to the database
+                await _dbContext.SaveChangesAsync();
+
+                // Commit the transaction
+                await transaction.CommitAsync();
+
+            }
+            catch (Exception ex)
+            {
+                // Rollback the transaction in case of any failure
+                await transaction.RollbackAsync();
+                _logger.LogError(ex, "Failed to delete product with ID {ProductId}", productId);
+
+                // Rethrow the exception to be handled by the caller or a global exception handler
+                throw;
+            }
+            // Proceed to delete the photo files after successful transaction commit
+            try
+            {
+                // Delete photo files
+                foreach (var photo in photosToDelete)
+                {
+                    await _transferPhotosToPath.DeleteFileAsync(photo.Path);
+                }
+            }
+            catch (Exception ex)
+            {
+                // Handle exceptions from file deletions
+                _logger.LogError(ex, "One or more photo files could not be deleted for product ID {ProductId}", productId);
+                return false;
+            }
+            // If all operations succeeded, return true
             return true;
         }
 
-        // public async Task<bool> DeleteProductAsync(int productId)
-        // {
-        //     // Find the product
-        //     var product = await _dbContext.Products.FindAsync(productId);
-        //     if (product == null)
-        //         return false;
+        public async Task<string> ReactivateProductAsync(int productId)
+        {
+            var product = await _dbContext.Products.FirstOrDefaultAsync(p => p.Id == productId);
+            if (product == null)
+                return "invalid product id, there is no products with this id!";
 
-        //     // Check if any order exists for this product's variations
-        //     bool productHasOrders = await _dbContext.OrderRows
-        //         .AnyAsync(or => or.ProductVariation.ProductId == productId);
-
-        //     // If the product has orders, set `isDeleted = true` for the product
-        //     if (productHasOrders)
-        //     {
-        //         product.isDeleted = true;
-        //     }
-        //     else
-        //     {
-        //         // Get all product variations for this product
-        //         var productVariations = await _dbContext.ProductVariations
-        //             .Where(v => v.ProductId == productId)
-        //             .ToListAsync();
-
-        //         // Get the paths of photos that should not be deleted (referenced in OrderRows)
-        //         var photosPathsNotAllowedToDelete = await _dbContext.OrderRows
-        //             .Select(or => or.MainProductVariationPhoto)
-        //             .ToListAsync();
-
-        //         // Loop through each product variation
-        //         foreach (var variation in productVariations)
-        //         {
-        //             // Check if the variation has any associated orders
-        //             bool variationHasOrders = await _dbContext.OrderRows
-        //                 .AnyAsync(or => or.ProductVariationId == variation.Id);
-
-        //             // If the variation has orders, set `isDeleted = true`
-        //             if (variationHasOrders)
-        //             {
-        //                 variation.isDeleted = true;
-        //             }
-        //             else
-        //             {
-        //                 // Get all photos for this variation that are not referenced in orders
-        //                 var photosToDelete = await _dbContext.Photos
-        //                     .Where(p => p.ProductVariationId == variation.Id && !photosPathsNotAllowedToDelete.Contains(p.Path))
-        //                     .ToListAsync();
-
-        //                 // Delete the photo files and mark the photo entities for deletion
-        //                 foreach (var photo in photosToDelete)
-        //                 {
-        //                     _transferPhotosToPath.DeleteFile(photo.Path);
-        //                     _dbContext.Photos.Remove(photo);
-        //                 }
-
-        //                 // Mark the variation for deletion (soft delete)
-        //                 variation.isDeleted = true;
-        //             }
-        //         }
-        //         _dbContext.Products.Remove(product);
-        //     }
-
-        //     // Save changes to the database
-        //     await _dbContext.SaveChangesAsync();
-        //     return true;
-        // }
+            product.isDeleted = false;
+            await _dbContext.SaveChangesAsync();
+            return "";
+        }
 
 
 
         // Product Variation (CRUD)
         public async Task<ProductVariationResponseModel> AddVariationForProdAsync(int productId, ProductVariationRequestModel model)
         {
+            // ----- using transaction -----
+
             // Validate ColorId
             if (await _dbContext.Colors.FirstOrDefaultAsync(c => c.Id == model.ColorId) == null)
                 return new ProductVariationResponseModel { message = "Invalid ColorId. There is no color with this ID." };
@@ -229,103 +287,147 @@ namespace SimpleECommerce.Services
             if (await _dbContext.Sizes.FirstOrDefaultAsync(c => c.Id == model.SizeId) == null)
                 return new ProductVariationResponseModel { message = "Invalid SizeId. There is no size with this ID." };
 
-            if (await _dbContext.Products.FirstOrDefaultAsync(p => p.Id == productId) == null)
+            var product = await _dbContext.Products.FirstOrDefaultAsync(p => p.Id == productId);
+            if (product == null)
                 return new ProductVariationResponseModel { message = "Invalid product Id. There is no products with this ID." };
+            if (product.isDeleted == true)
+                return new ProductVariationResponseModel { message = "please reactivate this product first!" };
+
 
             // Check if a variation already exists with the same ProductId, ColorId, and SizeId
             var existingVariation = await _dbContext.ProductVariations
                 .FirstOrDefaultAsync(v => v.ProductId == productId &&
                                           v.ColorId == model.ColorId &&
                                           v.SizeId == model.SizeId);
-
-            if (existingVariation != null)
+            using var transaction = await _dbContext.Database.BeginTransactionAsync();
+            var newPhotosPaths = new List<String>();
+            try
             {
-                // If the variation is not soft-deleted, return an error message
-                if (!existingVariation.isDeleted)
+                if (existingVariation != null)
                 {
+                    // If the variation is not soft-deleted, return an error message
+                    if (!existingVariation.isDeleted)
+                    {
+                        return new ProductVariationResponseModel
+                        {
+                            message = "A variation with the same ProductId, ColorId, and SizeId already exists."
+                        };
+                    }
                     return new ProductVariationResponseModel
                     {
-                        message = "A variation with the same ProductId, ColorId, and SizeId already exists."
+                        message = "this variation data is already stored you need to reactivate it only!"
                     };
+
+                    // // Reactivate the soft-deleted variation ////////------------- i need to remove recativation variaiton from here only in her hethod 
+
+                    // existingVariation.isDeleted = false;
+                    // existingVariation.QuantityInStock = model.QuantityInStock;
+                    // existingVariation.Sku = model.Sku;
+
+
+                    // // Handle photo updates for the reactivated variation
+                    // if (model.photosFiles?.Any() == true) // ------------------------------------------------------------->
+                    // {
+                    //     var photosToAdd = new List<Photo>();
+                    //     newPhotosPaths = await _transferPhotosToPath.GetPhotosPathAsync(model.photosFiles);
+                    //     foreach (var path in newPhotosPaths)
+                    //     {
+                    //         if (path.StartsWith("error, "))
+                    //         {
+                    //             if (photosToAdd.Any())
+                    //             {
+                    //                 foreach (var photoPath in newPhotosPaths)
+                    //                 {
+                    //                     if (!photoPath.StartsWith("error, "))
+                    //                         await _transferPhotosToPath.DeleteFileAsync(photoPath);
+                    //                 }
+                    //             }
+                    //             return new ProductVariationResponseModel { message = path };
+                    //         }
+
+                    //         // Check if the photo already exists before adding
+                    //         var existingPhoto = await _dbContext.Photos
+                    //             .FirstOrDefaultAsync(p => p.ProductVariationId == existingVariation.Id && p.Path == path);
+
+                    //         if (existingPhoto == null)
+                    //         {
+                    //             photosToAdd.Add(new Photo { ProductVariationId = existingVariation.Id, Path = path });
+                    //         }
+                    //     }
+                    //     await _dbContext.Photos.AddRangeAsync(photosToAdd);
+                    //     existingVariation.MainProductVariationPhoto = photosToAdd[0].Path;
+                    // }
+
+                    // await _dbContext.SaveChangesAsync();
+                    // return MapToVariationResponse(existingVariation);
                 }
 
-                // Reactivate the soft-deleted variation
-                existingVariation.isDeleted = false;
-                existingVariation.QuantityInStock = model.QuantityInStock;
-                existingVariation.Sku = model.Sku;
+                // If no existing variation is found, create a new one
+                var productVariation = new ProductVariation
+                {
+                    ProductId = productId,
+                    ColorId = model.ColorId,
+                    SizeId = model.SizeId,
+                    QuantityInStock = model.QuantityInStock,
+                    Sku = model.Sku
+                };
 
-                // Handle photo updates for the reactivated variation
+                _dbContext.ProductVariations.Add(productVariation);
+                // i must store this prod variation first get his id from the db then store the pathes for images
+                await _dbContext.SaveChangesAsync();
+
+
+                // Store the images for the new variation
                 if (model.photosFiles?.Any() == true)
                 {
-                    var newPhotosPaths = _transferPhotosToPath.GetPhotosPath(model.photosFiles);
+                    newPhotosPaths = await _transferPhotosToPath.GetPhotosPathAsync(model.photosFiles);
+                    var newPhotos = new List<Photo>();
                     foreach (var path in newPhotosPaths)
                     {
                         if (path.StartsWith("error, "))
+                        {   // delete the new added images again
+                            foreach (var photoPath in newPhotosPaths)
+                            {
+                                if (!path.StartsWith("error, "))
+                                    await _transferPhotosToPath.DeleteFileAsync(photoPath);
+                            }
+                            // delete the added new prodVariation again
+                            _dbContext.ProductVariations.Remove(productVariation);
+                            await _dbContext.SaveChangesAsync();
                             return new ProductVariationResponseModel { message = path };
-
-                        // Check if the photo already exists before adding
-                        var existingPhoto = await _dbContext.Photos
-                            .FirstOrDefaultAsync(p => p.ProductVariationId == existingVariation.Id && p.Path == path);
-
-                        if (existingPhoto == null)
-                        {
-                            _dbContext.Photos.Add(new Photo { ProductVariationId = existingVariation.Id, Path = path });
                         }
+
+                        newPhotos.Add(new Photo { ProductVariationId = productVariation.Id, Path = path });
                     }
+                    productVariation.MainProductVariationPhoto = newPhotos[0].Path;
+                    _dbContext.ProductVariations.Update(productVariation);
+                    await _dbContext.Photos.AddRangeAsync(newPhotos);
                 }
 
                 await _dbContext.SaveChangesAsync();
-                return MapToVariationResponse(existingVariation);
+
+                var result = MapToVariationResponse(productVariation);
+                result.ImagesPathes = productVariation.Photos?.Select(p => p.Path).ToList() ?? new List<string>();
+
+                await transaction.CommitAsync();
+                return result;
             }
-
-            // If no existing variation is found, create a new one
-            var productVariation = new ProductVariation
+            catch (Exception e)
             {
-                ProductId = productId,
-                ColorId = model.ColorId,
-                SizeId = model.SizeId,
-                QuantityInStock = model.QuantityInStock,
-                Sku = model.Sku
-            };
+                await transaction.RollbackAsync();
 
-            _dbContext.ProductVariations.Add(productVariation);
-            // i must store this prod variation first get his id from the db then store the pathes for images
-            await _dbContext.SaveChangesAsync();
-
-            // Store the images for the new variation
-            if (model.photosFiles?.Any() == true)
-            {
-                var pathes = _transferPhotosToPath.GetPhotosPath(model.photosFiles);
-                foreach (var path in pathes)
+                foreach (var path in newPhotosPaths)
                 {
                     if (path.StartsWith("error, "))
-                    {
-                        // delete the added new prodVariation again
-                        _dbContext.ProductVariations.Remove(productVariation);
-                        await _dbContext.SaveChangesAsync();
-                        return new ProductVariationResponseModel { message = path };
-                    }
-
-                    _dbContext.Photos.Add(new Photo { ProductVariationId = productVariation.Id, Path = path });
+                        await _transferPhotosToPath.DeleteFileAsync(path);
                 }
+                throw;
             }
-
-            await _dbContext.SaveChangesAsync();
-
-            var result = MapToVariationResponse(productVariation);
-            result.ImagesPathes = productVariation.Photos?.Select(p => p.Path).ToList() ?? new List<string>();
-
-            return result;
         }
-
-
-
-
-
         public async Task<IEnumerable<ProductVariationResponseModel>> ShowVariationsForProductAsync(int productId)
         {
             var variations = await _dbContext.ProductVariations
-                .Where(v => v.ProductId == productId && !v.isDeleted) // Exclude deleted variations
+                .Where(v => v.ProductId == productId /*&& !v.isDeleted*/) // Exclude deleted variations
                 .Include(v => v.Photos)
                 .Include(v => v.Color)
                 .Include(v => v.Size)
@@ -336,41 +438,49 @@ namespace SimpleECommerce.Services
 
         public async Task<ProductVariationResponseModel> UpdateVariationForProdAsync(int variationId, ProductVariationRequestModel model)
         {
-            var variation = await _dbContext.ProductVariations.FindAsync(variationId);
+            // here you don't need using transaction because only one using for saveChanges
+
+            var variation = await _dbContext.ProductVariations
+                .Include(pv => pv.Photos)
+                .FirstOrDefaultAsync(pv => pv.Id == variationId);
+
             if (variation == null || variation.isDeleted)
-                return new ProductVariationResponseModel { message = "Variation not found or it is deleted." };
+                return new ProductVariationResponseModel { message = "Variation not found or it is deleted please reactivate it first!" };
 
             // update photos for prodVariation 
             // 1- try to add the new photos first 
-            var theNewPathes = _transferPhotosToPath.GetPhotosPath(model.photosFiles);
+            var theNewPathes = await _transferPhotosToPath.GetPhotosPathAsync(model.photosFiles);
+            var theNewPhotos = new List<Photo>();
             foreach (var path in theNewPathes)
             {
                 if (path.StartsWith("error, "))
                 {
+                    // delete any stored photos
+                    foreach (var photoPath in theNewPathes)
+                    {
+                        if (!photoPath.StartsWith("error, "))
+                            await _transferPhotosToPath.DeleteFileAsync(photoPath);
+                    }
                     return new ProductVariationResponseModel { message = path };
                 }
-                _dbContext.Photos.Add(new Photo { ProductVariationId = variationId, Path = path });
+                theNewPhotos.Add(new Photo { ProductVariationId = variationId, Path = path });
             }
-            // 2- then delete the old images for this prodVariation if them didn't use in any main order photos
-            // avoid nessesary photos 
-            var photosPathsNotAllowedToDelete = await _dbContext.OrderRows
-                    .Select(or => or.MainProductVariationPhoto)
-                    .ToListAsync();
 
-            var photosToDelete = await _dbContext.Photos
-                .Where(p => p.ProductVariationId == variationId && !photosPathsNotAllowedToDelete.Contains(p.Path))
-                .ToListAsync();
-
-            foreach (var photo in photosToDelete)
+            // 2- then delete the old images for this prodVariation
+            foreach (var photo in variation.Photos)
             {
-                _transferPhotosToPath.DeleteFile(photo.Path);
+                await _transferPhotosToPath.DeleteFileAsync(photo.Path);
                 _dbContext.Photos.Remove(photo);
             }
+
+            // add the new photos
+            _dbContext.Photos.AddRange(theNewPhotos);
 
             variation.ColorId = model.ColorId;
             variation.SizeId = model.SizeId;
             variation.QuantityInStock = model.QuantityInStock;
             variation.Sku = model.Sku;
+            variation.MainProductVariationPhoto = theNewPhotos[0].Path;
 
             await _dbContext.SaveChangesAsync();
 
@@ -386,10 +496,11 @@ namespace SimpleECommerce.Services
             var variation = await _dbContext.ProductVariations.FindAsync(variationId);
             if (variation == null) return false;
 
-            bool variationHasOrders = await _dbContext.OrderRows
-                .AnyAsync(or => or.ProductVariationId == variationId);
+            bool IsVarAssignedInOrderOrCart = await _dbContext.OrderRows
+                .AnyAsync(or => or.ProductVariationId == variationId) ||
+                await _dbContext.CartRows.AnyAsync(c => c.ProductVariationId == variationId);
 
-            if (variationHasOrders)
+            if (IsVarAssignedInOrderOrCart)
             {
                 // Soft delete the variation
                 variation.isDeleted = true;
@@ -399,17 +510,17 @@ namespace SimpleECommerce.Services
                 // Physically delete the variation
                 _dbContext.ProductVariations.Remove(variation);
 
-                var photosPathsNotAllowedToDelete = await _dbContext.OrderRows
-                    .Select(or => or.MainProductVariationPhoto)
-                    .ToListAsync();
+                // var photosPathsNotAllowedToDelete = await _dbContext.OrderRows
+                //     .Select(or => or.MainProductVariationPhoto)
+                //     .ToListAsync();
 
                 var photosToDelete = await _dbContext.Photos
-                    .Where(p => p.ProductVariationId == variationId && !photosPathsNotAllowedToDelete.Contains(p.Path))
+                    .Where(p => p.ProductVariationId == variationId && p.Path != variation.MainProductVariationPhoto)
                     .ToListAsync();
 
                 foreach (var photo in photosToDelete)
                 {
-                    _transferPhotosToPath.DeleteFile(photo.Path);
+                    await _transferPhotosToPath.DeleteFileAsync(photo.Path);
                     _dbContext.Photos.Remove(photo);
                 }
             }
@@ -437,7 +548,7 @@ namespace SimpleECommerce.Services
             // Optionally update photos if new ones are provided
             if (photosFiles?.Any() == true)
             {
-                var newPhotosPaths = _transferPhotosToPath.GetPhotosPath(photosFiles);
+                var newPhotosPaths = await _transferPhotosToPath.GetPhotosPathAsync(photosFiles);
                 foreach (var path in newPhotosPaths)
                 {
                     if (path.StartsWith("error, "))
@@ -458,6 +569,7 @@ namespace SimpleECommerce.Services
         }
 
 
+        // this funciton will be for the main bage for the App
         public async Task<IEnumerable<GetProductsWithColorsResponse>> GetProductsWithColorsAsync()
         {
             var prodWithColors = await _dbContext.Products
@@ -562,6 +674,7 @@ namespace SimpleECommerce.Services
                 Id = product.Id,
                 Name = product.Name,
                 Description = product.Description,
+                isDeleted = product.isDeleted,
                 Price = product.Price,
                 category = new CategoryProductsResponse
                 {
@@ -582,8 +695,10 @@ namespace SimpleECommerce.Services
             Id = variation.Id,
             Color = variation.Color?.Value ?? "N/A",
             Size = variation.Size?.Value ?? "N/A",
+            isDeleted = variation.isDeleted,
             QuantityInStock = variation.QuantityInStock,
             Sku = variation.Sku,
+            mainVariationPhotoPath = variation.MainProductVariationPhoto,
             ImagesPathes = variation.Photos?.Select(p => p.Path).ToList() ?? new List<string>(),
             message = ""
         };

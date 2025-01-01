@@ -180,12 +180,6 @@ namespace SimpleECommerce.DataAndContext
                     .HasColumnType("decimal(10, 2)")
                     .HasColumnName("priceForProduct");
 
-                // New column configuration for MainProductVariationPhoto
-                entity.Property(e => e.MainProductVariationPhoto)
-                    .IsRequired() // Not nullable
-                    .HasMaxLength(500)
-                    .HasColumnName("mainProductVariationPhoto");
-
                 entity.Property(e => e.ProductVariationId).HasColumnName("productVariationId");
 
                 entity.Property(e => e.Quantity).HasColumnName("quantity");
@@ -251,6 +245,12 @@ namespace SimpleECommerce.DataAndContext
 
                 entity.Property(e => e.SizeId).HasColumnName("sizeId");
 
+                // New column configuration for MainProductVariationPhoto
+                entity.Property(e => e.MainProductVariationPhoto)
+                    .IsRequired() // Not nullable
+                    .HasMaxLength(500)
+                    .HasColumnName("mainProductVariationPhoto");
+
                 // New column configuration for isDeleted
                 entity.Property(e => e.isDeleted)
                     .IsRequired()
@@ -278,6 +278,11 @@ namespace SimpleECommerce.DataAndContext
                     .HasForeignKey(d => d.SizeId)
                     .OnDelete(DeleteBehavior.ClientSetNull)
                     .HasConstraintName("FK__ProductVa__sizeI__3F466844");
+
+                entity.HasOne(pv => pv.Product)
+                    .WithMany(p => p.ProductVariations)
+                    .HasForeignKey(pv => pv.ProductId)
+                    .OnDelete(DeleteBehavior.ClientSetNull);
             });
 
             modelBuilder.Entity<Size>(entity =>

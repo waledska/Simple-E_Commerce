@@ -15,6 +15,11 @@ using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// for using logging 
+builder.Logging.ClearProviders();
+builder.Logging.AddConsole();
+builder.Logging.AddDebug();
+
 // Add services to the container.
 
 // configuration to map the data from appsetings to class JWT

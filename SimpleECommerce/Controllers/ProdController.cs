@@ -159,9 +159,9 @@ namespace SimpleECommerce.Controllers
 
         // Reactivate Soft-Deleted Variation API
         [HttpPut("variation/reactivate/{variationId}")]
-        public async Task<IActionResult> ReactivateVariation(int variationId, [FromBody] ProductVariationRequestModel model)
+        public async Task<IActionResult> ReactivateVariation(int variationId, [FromForm] ProductVariationRequestModel model)
         {
-            var result = await _prodService.ReactivateVariationAsync(variationId, model.QuantityInStock, model.Sku);
+            var result = await _prodService.ReactivateVariationAsync(variationId, model.QuantityInStock, model.Sku, model.photosFiles);
             if (result == null)
                 return NotFound("Variation not found or already active.");
 

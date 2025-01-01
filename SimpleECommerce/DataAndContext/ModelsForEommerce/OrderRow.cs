@@ -10,9 +10,6 @@ namespace SimpleECommerce.DataAndContext.ModelsForEommerce
         public int ProductVariationId { get; set; }
         public int Quantity { get; set; }
         public decimal PriceForProduct { get; set; }
-        // New property for the main product variation photo
-        public string MainProductVariationPhoto { get; set; } = null!;
-
         public virtual Order Order { get; set; } = null!;
         public virtual ProductVariation ProductVariation { get; set; } = null!;
     }

@@ -18,6 +18,8 @@ namespace SimpleECommerce.DataAndContext.ModelsForEommerce
         public int SizeId { get; set; }
         public string? Sku { get; set; }
         public int QuantityInStock { get; set; }
+        // New property for the main product variation photo
+        public string MainProductVariationPhoto { get; set; } = null!;
         public bool isDeleted { get; set; }
 
         public virtual Color Color { get; set; } = null!;

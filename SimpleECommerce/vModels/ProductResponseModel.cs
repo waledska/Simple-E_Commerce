@@ -14,6 +14,7 @@ namespace SimpleECommerce.vModels
         public int Id { get; set; }
         public string Name { get; set; } = null!;
         public string Description { get; set; } = null!;
+        public bool isDeleted { get; set; }
         public decimal Price { get; set; }
         public List<ProductVariationResponseModel> Variations { get; set; } = new();
         public string message { get; set; }
