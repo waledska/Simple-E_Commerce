@@ -23,7 +23,7 @@ namespace SimpleECommerce.Services
         Task<IEnumerable<ProductVariationResponseModel>> ShowVariationsForProductAsync(int productId);
         Task<ProductVariationResponseModel> UpdateVariationForProdAsync(int variationId, ProductVariationRequestModel model);
         Task<bool> DeleteVariationForProdAsync(int variationId);
-        Task<ProductVariationResponseModel> ReactivateVariationAsync(int variationId, int? quantityInStock = null, string? sku = null, List<IFormFile>? photosFiles = null);
+        Task<ProductVariationResponseModel> ReactivateVariationAsync(reactivateVariationRequestModel model);
 
         // Additional Functionality
         Task<IEnumerable<GetProductsWithColorsResponse>> GetProductsWithColorsAsync();

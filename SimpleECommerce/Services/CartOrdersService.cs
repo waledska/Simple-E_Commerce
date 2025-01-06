@@ -23,7 +23,7 @@ namespace SimpleECommerce.Services
             var currentUserId = _authService.getUserId();
             var variation = await _dbContext.ProductVariations.FirstOrDefaultAsync(v => v.Id == model.variationId);
             if (variation == null || variation.isDeleted == true)
-                return "invalid variation id, there is no variations woth this id! ";
+                return "invalid variation id, there is no variations with this id! ";
 
             await _dbContext.CartRows.AddAsync(
                 new CartRow
@@ -39,7 +39,7 @@ namespace SimpleECommerce.Services
 
         public Task<List<CartRow>> getMyCartItemsAsync()
         {
-            // you need update while deleting the proVariaiton as 
+            // you need update while deleting the proVariaiton to soft delete if there is this product in cart also like orders
             var currentUserId = _authService.getUserId();
 
             throw new NotImplementedException();
@@ -52,6 +52,7 @@ namespace SimpleECommerce.Services
 
         public Task<string> DeleteItemFromCartAsync(int ItemId)
         {
+            //after delete you should check if this prod deleted by soft delete and the reason for that was from the cart only so you should after deleting from the cart applying hard delete!
             throw new NotImplementedException();
         }
 

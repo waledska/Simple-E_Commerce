@@ -61,9 +61,14 @@ namespace SimpleECommerce.Controllers
         [HttpPost("create")]
         public async Task<IActionResult> CreateProduct([FromBody] ProductRequestModel model)
         {
-            if (!ModelState.IsValid) return BadRequest(ModelState);
+            if (!ModelState.IsValid)
+                return BadRequest(ModelState);
+
             var result = await _prodService.CreateProductAsync(model);
-            return CreatedAtAction(nameof(ShowProducts), new { id = result.Id }, result);
+            if (result.message != "")
+                return BadRequest(result.message);
+
+            return Ok(result);
         }
 
         [HttpGet("all")]
@@ -93,6 +98,17 @@ namespace SimpleECommerce.Controllers
         {
             var result = await _prodService.DeleteProductAsync(productId);
             return result ? Ok() : BadRequest("Product not found.");
+        }
+
+        // Reactivate Soft-Deleted Product API
+        [HttpPut("reActivate/{productId}")]
+        public async Task<IActionResult> ReactivateVariation(int productId)
+        {
+            var result = await _prodService.ReactivateProductAsync(productId);
+            if (result != "")
+                return BadRequest(result);
+
+            return Ok();
         }
 
         // Product Variation APIs
@@ -158,12 +174,15 @@ namespace SimpleECommerce.Controllers
         }
 
         // Reactivate Soft-Deleted Variation API
-        [HttpPut("variation/reactivate/{variationId}")]
-        public async Task<IActionResult> ReactivateVariation(int variationId, [FromForm] ProductVariationRequestModel model)
+        [HttpPut("variation/reactivate")]
+        public async Task<IActionResult> ReactivateVariation([FromForm] reactivateVariationRequestModel model)
         {
-            var result = await _prodService.ReactivateVariationAsync(variationId, model.QuantityInStock, model.Sku, model.photosFiles);
-            if (result == null)
-                return NotFound("Variation not found or already active.");
+            if (!ModelState.IsValid)
+                return BadRequest(ModelState);
+
+            var result = await _prodService.ReactivateVariationAsync(model);
+            if (result.message != "")
+                return BadRequest(result.message);
 
             return Ok(result);
         }
