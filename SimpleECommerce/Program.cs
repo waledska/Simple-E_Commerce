@@ -10,6 +10,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using System.Text;
+using System.Text.Json.Serialization;
 
 
 
@@ -71,7 +72,14 @@ builder.Services.Configure<DataProtectionTokenProviderOptions>(op =>
     op.TokenLifespan = TimeSpan.FromHours(1);
 });
 
-builder.Services.AddControllers();
+//builder.Services.AddControllers();
+// Add services to the container.
+builder.Services.AddControllers()
+    .AddJsonOptions(options =>
+    {
+        options.JsonSerializerOptions.ReferenceHandler = ReferenceHandler.Preserve;
+        options.JsonSerializerOptions.WriteIndented = true; // Optional: for readable JSON
+    });
 builder.Services.AddMemoryCache();
 
 // Add HttpContextAccessor service this is for make func getUserId...
@@ -113,6 +121,7 @@ builder.Services.AddSwaggerGen(c =>
 });
 
 var app = builder.Build();
+
 
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())

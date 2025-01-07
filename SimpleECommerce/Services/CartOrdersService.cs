@@ -3,6 +3,7 @@ using SimpleECommerce.DataAndContext;
 using SimpleECommerce.DataAndContext.ModelsForEommerce;
 using Microsoft.EntityFrameworkCore;
 using System.Diagnostics.CodeAnalysis;
+using SimpleECommerce.Migrations;
 
 namespace SimpleECommerce.Services
 {
@@ -10,11 +11,13 @@ namespace SimpleECommerce.Services
     {
         private readonly ApplicationDbContext _dbContext;
         private readonly IAuthService _authService;
+        private readonly IProdService _prodService;
 
-        public CartOrdersService(ApplicationDbContext dbContext, IAuthService authService)
+        public CartOrdersService(ApplicationDbContext dbContext, IAuthService authService, IProdService prodService)
         {
             _dbContext = dbContext;
             _authService = authService;
+            _prodService = prodService;
         }
         // cartRow[C R U D]
         //[forUser => authentication]
@@ -23,7 +26,10 @@ namespace SimpleECommerce.Services
             var currentUserId = _authService.getUserId();
             var variation = await _dbContext.ProductVariations.FirstOrDefaultAsync(v => v.Id == model.variationId);
             if (variation == null || variation.isDeleted == true)
-                return "invalid variation id, there is no variations with this id! ";
+                return "invalid variation id, there is no available variations with this id! ";
+
+            if (variation.QuantityInStock < model.quantity)
+                return "this amount isn't available in stock for this item!";
 
             await _dbContext.CartRows.AddAsync(
                 new CartRow
@@ -37,53 +43,95 @@ namespace SimpleECommerce.Services
             return "";
         }
 
-        public Task<List<CartRow>> getMyCartItemsAsync()
+        public async Task<List<CartRow>> getMyCartItemsAsync()
         {
-            // you need update while deleting the proVariaiton to soft delete if there is this product in cart also like orders
+            // you comed back after updating your delete method to soft delete product's variaitons in the user carts!
             var currentUserId = _authService.getUserId();
 
-            throw new NotImplementedException();
+            var result = await _dbContext.CartRows.Where(cr => cr.UserId == currentUserId)
+            //.AsNoTracking()
+            .Include(cr => cr.ProductVariation)
+            .ThenInclude(pv => pv.Color)
+            .Include(cr => cr.ProductVariation)
+            .ThenInclude(pv => pv.Size)
+            .ToListAsync();
+
+            return result;
         }
 
-        public Task<string> updateItemQuantityInCartAsync(addItemToCartModel model)
+        public async Task<string> updateItemQuantityInCartAsync(addItemToCartModel model)
         {
-            throw new NotImplementedException();
+            var currentUserId = _authService.getUserId();
+
+            var Item = await _dbContext.CartRows
+                .Where(cr => cr.UserId == currentUserId && cr.ProductVariationId == model.variationId)
+                .Include(cr => cr.ProductVariation)
+                .FirstOrDefaultAsync();
+            if (Item == null)
+                return "this item isn't available in your cart";
+            // check if the new amount available in Stocks
+            if (Item.ProductVariation.QuantityInStock < model.quantity)
+                return "this amount isn't available in stock for this item!";
+            if (Item.ProductVariation.isDeleted)
+                return "this item isn't available any more!";
+
+            Item.Quantity = model.quantity;
+            await _dbContext.SaveChangesAsync();
+            return "";
         }
 
-        public Task<string> DeleteItemFromCartAsync(int ItemId)
+        public async Task<string> DeleteItemFromCartAsync(int ItemId)
         {
-            //after delete you should check if this prod deleted by soft delete and the reason for that was from the cart only so you should after deleting from the cart applying hard delete!
-            throw new NotImplementedException();
+            var currentUserId = _authService.getUserId();
+            var item = await _dbContext.CartRows
+                .Where(cr => cr.ProductVariationId == ItemId && cr.UserId == currentUserId)
+                .Include(cr => cr.ProductVariation)
+                .FirstOrDefaultAsync();
+
+            if (item == null)
+                return "this item isn't already in cart!";
+
+            // remove this cart row
+            _dbContext.CartRows.Remove(item);
+            var rowsAffected = await _dbContext.SaveChangesAsync();
+
+            // after delete checking if this prod deleted by soft delete and the reason was from the cart only so you should after deleting from the cart applying hard delete!
+            if (rowsAffected > 0 && item.ProductVariation.isDeleted)
+            {
+                await _prodService.DeleteVariationForProdAsync(ItemId);
+            }
+
+            return "";
         }
 
         // // orders[C R U D]
         // //[ForUser]
-        public Task<string> cartCheckOutAsync(int addressId)
+        public async Task<string> cartCheckOutAsync(int addressId)
         {
             throw new NotImplementedException();
         }
-        public Task<string> buyProdAsync(buyProdRequestModel model)
-        {
-            throw new NotImplementedException();
-        }
-
-        public Task<List<orderWithOutDetails>> GetMyOrdersAsync()
+        public async Task<string> buyProdAsync(buyProdRequestModel model)
         {
             throw new NotImplementedException();
         }
 
-        public Task<Order> GetOrderDetailsAsync(int orderId)
+        public async Task<List<orderWithOutDetails>> GetMyOrdersAsync()
         {
             throw new NotImplementedException();
         }
 
-        public Task<string> deleteOrderbyUserAsync(int orderId)
+        public async Task<Order> GetOrderDetailsAsync(int orderId)
+        {
+            throw new NotImplementedException();
+        }
+
+        public async Task<string> deleteOrderbyUserAsync(int orderId)
         {
             throw new NotImplementedException();
         }
 
         //[ForAdmin]
-        public Task<List<orderWithOutDetails>> GetAllUsersOrdersAsync(string userId = null,
+        public async Task<List<orderWithOutDetails>> GetAllUsersOrdersAsync(string userId = null,
                     string orderStatus = null,
                     int? orderId = null,
                     string phoneNumber = null,
@@ -91,11 +139,11 @@ namespace SimpleECommerce.Services
         {
             throw new NotImplementedException();
         }
-        public Task<string> updateOrderStatusAsync(updateOrderStatus model)
+        public async Task<string> updateOrderStatusAsync(updateOrderStatus model)
         {
             throw new NotImplementedException();
         }
-        public Task<string> deleteOrderbyAdminAsync(int orderId)
+        public async Task<string> deleteOrderbyAdminAsync(int orderId)
         {
             throw new NotImplementedException();
         }

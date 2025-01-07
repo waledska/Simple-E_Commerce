@@ -17,7 +17,46 @@ namespace SimpleECommerce.Controllers
         {
             _cartOrdersService = cartOrdersService;
         }
+        [Authorize(AuthenticationSchemes = "Bearer")]
+        [HttpPost("addItemToMyCart")]
+        public async Task<IActionResult> addItemToMyCart([FromBody] addItemToCartModel model)
+        {
+            if (!ModelState.IsValid) return BadRequest(ModelState);
+            var result = await _cartOrdersService.addItemToMyCartAsync(model);
+            if (result != "")
+                return BadRequest(result);
 
+            return Ok();
+        }
+        [Authorize(AuthenticationSchemes = "Bearer")]
+        [HttpGet("GetMyCartItems")]
+        public async Task<IActionResult> GetMyCartItems()
+        {
+            var result = await _cartOrdersService.getMyCartItemsAsync();
+
+            return Ok(result);
+        }
+        // [Authorize(AuthenticationSchemes = "Bearer")]
+        [HttpPut("updateItemQuantityInCart")]
+        public async Task<IActionResult> updateItemQuantityInCart([FromBody] addItemToCartModel model)
+        {
+            if (!ModelState.IsValid) return BadRequest(ModelState);
+
+            var result = await _cartOrdersService.updateItemQuantityInCartAsync(model);
+
+            if (result != "")
+                return BadRequest(result);
+            return Ok();
+        }
+        // [Authorize(AuthenticationSchemes = "Bearer")]
+        [HttpDelete("DeleteItemFromCart/{itemId}")]
+        public async Task<IActionResult> DeleteItemFromCart(int itemId)
+        {
+            var result = await _cartOrdersService.DeleteItemFromCartAsync(itemId);
+            if (result != "")
+                return BadRequest(result);
+            return Ok();
+        }
 
 
     }
