@@ -49,10 +49,10 @@ namespace SimpleECommerce.Controllers
             return Ok();
         }
         // [Authorize(AuthenticationSchemes = "Bearer")]
-        [HttpDelete("DeleteItemFromCart/{itemId}")]
-        public async Task<IActionResult> DeleteItemFromCart(int itemId)
+        [HttpDelete("DeleteItemFromCart/{variationId}")]
+        public async Task<IActionResult> DeleteItemFromCart(int variationId)
         {
-            var result = await _cartOrdersService.DeleteItemFromCartAsync(itemId);
+            var result = await _cartOrdersService.DeleteItemFromCartAsync(variationId);
             if (result != "")
                 return BadRequest(result);
             return Ok();

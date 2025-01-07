@@ -25,36 +25,58 @@ namespace SimpleECommerce.Services
         {
             var currentUserId = _authService.getUserId();
             var variation = await _dbContext.ProductVariations.FirstOrDefaultAsync(v => v.Id == model.variationId);
-            if (variation == null || variation.isDeleted == true)
+            if (variation == null || variation.isDeleted)
                 return "invalid variation id, there is no available variations with this id! ";
 
             if (variation.QuantityInStock < model.quantity)
                 return "this amount isn't available in stock for this item!";
 
-            await _dbContext.CartRows.AddAsync(
+            var itemInCart = await _dbContext.CartRows
+                .FirstOrDefaultAsync(cr => cr.ProductVariationId == model.variationId && cr.UserId == currentUserId);
+            if (itemInCart != null && !variation.isDeleted)
+            {
+                // user added this item before in his cart
+                if (itemInCart.Quantity + model.quantity > variation.QuantityInStock)
+                    return "this amount isn't available in stock for this item!";
+                itemInCart.Quantity += model.quantity;
+            }
+            else
+            {
+                // item not in the user cart
+                await _dbContext.CartRows.AddAsync(
                 new CartRow
                 {
                     UserId = currentUserId,
                     ProductVariationId = model.variationId,
                     Quantity = model.quantity
                 });
-            await _dbContext.SaveChangesAsync();
+            }
 
+            await _dbContext.SaveChangesAsync();
             return "";
         }
 
-        public async Task<List<CartRow>> getMyCartItemsAsync()
+        public async Task<List<cartItemResponse>> getMyCartItemsAsync()
         {
             // you comed back after updating your delete method to soft delete product's variaitons in the user carts!
             var currentUserId = _authService.getUserId();
 
             var result = await _dbContext.CartRows.Where(cr => cr.UserId == currentUserId)
-            //.AsNoTracking()
-            .Include(cr => cr.ProductVariation)
-            .ThenInclude(pv => pv.Color)
-            .Include(cr => cr.ProductVariation)
-            .ThenInclude(pv => pv.Size)
-            .ToListAsync();
+            .AsNoTracking()
+            .Select(cr => new cartItemResponse
+            {
+                cartRowId = cr.Id,
+                QuantityOfVarInCart = cr.Quantity,
+                variaitonId = cr.ProductVariationId,
+                isVariationDeleted = cr.ProductVariation.isDeleted,
+                mainVarPhoto = cr.ProductVariation.MainProductVariationPhoto,
+                sizeValue = cr.ProductVariation.Size.Value,
+                colorValue = cr.ProductVariation.Color.Value,
+                productId = cr.ProductVariation.Product.Id,
+                productDescription = cr.ProductVariation.Product.Description ?? "this product without discription",
+                productName = cr.ProductVariation.Product.Name,
+                productPrice = cr.ProductVariation.Product.Price,
+            }).ToListAsync();
 
             return result;
         }
@@ -80,11 +102,11 @@ namespace SimpleECommerce.Services
             return "";
         }
 
-        public async Task<string> DeleteItemFromCartAsync(int ItemId)
+        public async Task<string> DeleteItemFromCartAsync(int variationId)
         {
             var currentUserId = _authService.getUserId();
             var item = await _dbContext.CartRows
-                .Where(cr => cr.ProductVariationId == ItemId && cr.UserId == currentUserId)
+                .Where(cr => cr.ProductVariationId == variationId && cr.UserId == currentUserId)
                 .Include(cr => cr.ProductVariation)
                 .FirstOrDefaultAsync();
 
@@ -98,7 +120,7 @@ namespace SimpleECommerce.Services
             // after delete checking if this prod deleted by soft delete and the reason was from the cart only so you should after deleting from the cart applying hard delete!
             if (rowsAffected > 0 && item.ProductVariation.isDeleted)
             {
-                await _prodService.DeleteVariationForProdAsync(ItemId);
+                await _prodService.DeleteVariationForProdAsync(variationId);
             }
 
             return "";

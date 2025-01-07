@@ -134,7 +134,7 @@ namespace SimpleECommerce.Services
 
                 return new registerResult { Message = errors };
             }
-
+            await UseOtpForUserAsync(new VerificationOtp { OTP = model.OTPforEmailConfirmaiton, userEmail = model.email });
 
             // select the user with his full data
             var newUserFullData = await _userManager.Users.FirstOrDefaultAsync(p => p.Email == model.email);
@@ -151,9 +151,6 @@ namespace SimpleECommerce.Services
                 token = new JwtSecurityTokenHandler().WriteToken(jwtSecurityToken),
                 ExpiresOn = jwtSecurityToken.ValidTo
             };
-
-
-
             return resultModel;
         }
         // login
@@ -226,14 +223,13 @@ namespace SimpleECommerce.Services
             {
                 return "invalid user data!";
             }
-
-            if (!await IsValidOtpForUserAsync(new VerificationOtp { OTP = model.OTP, userEmail = model.gmail }))
-            {
-                return "Invalid or expired OTP.";
-            }
             if (model.newPassword != model.confirmNewPassword)
             {
                 return "The new password and confirm new password fields do not match.";
+            }
+            if (!await IsValidOtpForUserAsync(new VerificationOtp { OTP = model.OTP, userEmail = model.gmail }))
+            {
+                return "Invalid or expired OTP.";
             }
 
             var passwordChanged = await _userManager.ResetPasswordAsync(user, user.TokenForRessetingPass, model.newPassword);
@@ -247,6 +243,8 @@ namespace SimpleECommerce.Services
                 message = string.Join(", ", errors);
                 return message;
             }
+            await UseOtpForUserAsync(new VerificationOtp { OTP = model.OTP, userEmail = model.gmail });
+
             return message;
         }
 
@@ -492,7 +490,7 @@ namespace SimpleECommerce.Services
                        //return otp; /////////////////// this modification only and above!!!
         }
 
-        private async Task<bool> IsValidOtpForUserAsync(VerificationOtp request)
+        private async Task<bool> UseOtpForUserAsync(VerificationOtp request)
         {
 
             var otpForThisEmail = await _DbContext.emailOtps.FirstOrDefaultAsync(x => x.Email == request.userEmail);
@@ -507,6 +505,13 @@ namespace SimpleECommerce.Services
 
             return false;
         }
+        private async Task<bool> IsValidOtpForUserAsync(VerificationOtp request)
+        {
+            var otpForThisEmail = await _DbContext.emailOtps.AsNoTracking().FirstOrDefaultAsync(x => x.Email == request.userEmail);
 
+            if ((otpForThisEmail is not null) && (otpForThisEmail.ValidTo > DateTime.Now) && (otpForThisEmail.Otp == request.OTP))
+                return true;
+            return false;
+        }
     }
 }

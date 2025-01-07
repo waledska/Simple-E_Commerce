@@ -8,9 +8,9 @@ namespace SimpleECommerce.Services
         // cartRow[C R U D]
         //[forUser]
         Task<string> addItemToMyCartAsync(addItemToCartModel model);
-        Task<List<CartRow>> getMyCartItemsAsync();
+        Task<List<cartItemResponse>> getMyCartItemsAsync();
         Task<string> updateItemQuantityInCartAsync(addItemToCartModel model);
-        Task<string> DeleteItemFromCartAsync(int ItemId);
+        Task<string> DeleteItemFromCartAsync(int variationId);
 
         // // orders[C R U D]
         // //[ForUser]
