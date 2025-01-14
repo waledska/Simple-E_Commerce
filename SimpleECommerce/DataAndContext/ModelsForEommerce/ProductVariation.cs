@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.ComponentModel.DataAnnotations;
 
 namespace SimpleECommerce.DataAndContext.ModelsForEommerce
 {
@@ -17,6 +18,9 @@ namespace SimpleECommerce.DataAndContext.ModelsForEommerce
         public int ColorId { get; set; }
         public int SizeId { get; set; }
         public string? Sku { get; set; }
+        // Concurrency Token
+        [Timestamp]
+        public byte[] RowVersion { get; set; }
         public int QuantityInStock { get; set; }
         // New property for the main product variation photo
         public string MainProductVariationPhoto { get; set; } = null!;

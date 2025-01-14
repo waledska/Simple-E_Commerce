@@ -261,6 +261,12 @@ namespace SimpleECommerce.DataAndContext
                     .HasMaxLength(100)
                     .HasColumnName("SKU");
 
+                // Configure RowVersion as concurrency token
+                entity.Property(e => e.RowVersion)
+                    .HasColumnName("rowVersionn")
+                    .IsRowVersion()
+                    .IsConcurrencyToken();
+
                 entity.HasOne(d => d.Color)
                     .WithMany(p => p.ProductVariations)
                     .HasForeignKey(d => d.ColorId)

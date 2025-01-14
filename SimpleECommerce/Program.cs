@@ -26,6 +26,9 @@ builder.Logging.AddDebug();
 // configuration to map the data from appsetings to class JWT
 builder.Services.Configure<JWT>(builder.Configuration.GetSection("JWT"));
 
+// configuration to map the data from appsetings to class orderStatusData
+builder.Services.Configure<orderStatusesData>(builder.Configuration.GetSection("OrderStatuses"));
+
 // assign the connection string variable with it's data
 var connectionString = builder.Configuration.GetConnectionString("defaultConnection");
 // use this connection string to map between my class db context and my db in the sql server

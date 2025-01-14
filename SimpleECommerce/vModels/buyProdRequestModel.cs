@@ -5,6 +5,10 @@ namespace SimpleECommerce.vModels
 {
     public class buyProdRequestModel
     {
+        public buyProdRequestModel()
+        {
+            productVariation = new ProductVariation();
+        }
         [Required]
         public ProductVariation productVariation { get; set; }
         [Required]

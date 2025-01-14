@@ -36,7 +36,7 @@ namespace SimpleECommerce.Controllers
 
             return Ok(result);
         }
-        // [Authorize(AuthenticationSchemes = "Bearer")]
+        [Authorize(AuthenticationSchemes = "Bearer")]
         [HttpPut("updateItemQuantityInCart")]
         public async Task<IActionResult> updateItemQuantityInCart([FromBody] addItemToCartModel model)
         {
@@ -48,11 +48,20 @@ namespace SimpleECommerce.Controllers
                 return BadRequest(result);
             return Ok();
         }
-        // [Authorize(AuthenticationSchemes = "Bearer")]
+        [Authorize(AuthenticationSchemes = "Bearer")]
         [HttpDelete("DeleteItemFromCart/{variationId}")]
         public async Task<IActionResult> DeleteItemFromCart(int variationId)
         {
             var result = await _cartOrdersService.DeleteItemFromCartAsync(variationId);
+            if (result != "")
+                return BadRequest(result);
+            return Ok();
+        }
+        [Authorize(AuthenticationSchemes = "Bearer")]
+        [HttpPost("cartCheckOut/{addressId}")]
+        public async Task<IActionResult> cartCheckOut(int addressId)
+        {
+            var result = await _cartOrdersService.cartCheckOutAsync(addressId);
             if (result != "")
                 return BadRequest(result);
             return Ok();

@@ -295,31 +295,32 @@ namespace SimpleECommerce.Services
         public async Task<ProductVariationResponseModel> AddVariationForProdAsync(int productId, ProductVariationRequestModel model)
         {
             // ----- using transaction -----
-
-            // Validate ColorId
-            if (await _dbContext.Colors.FirstOrDefaultAsync(c => c.Id == model.ColorId) == null)
-                return new ProductVariationResponseModel { message = "Invalid ColorId. There is no color with this ID." };
-
-            // Validate SizeId
-            if (await _dbContext.Sizes.FirstOrDefaultAsync(c => c.Id == model.SizeId) == null)
-                return new ProductVariationResponseModel { message = "Invalid SizeId. There is no size with this ID." };
-
-            var product = await _dbContext.Products.FirstOrDefaultAsync(p => p.Id == productId);
-            if (product == null)
-                return new ProductVariationResponseModel { message = "Invalid product Id. There is no products with this ID." };
-            if (product.isDeleted == true)
-                return new ProductVariationResponseModel { message = "please reactivate this product first!" };
-
-
-            // Check if a variation already exists with the same ProductId, ColorId, and SizeId
-            var existingVariation = await _dbContext.ProductVariations
-                .FirstOrDefaultAsync(v => v.ProductId == productId &&
-                                          v.ColorId == model.ColorId &&
-                                          v.SizeId == model.SizeId);
-            using var transaction = await _dbContext.Database.BeginTransactionAsync();
             var newPhotosPaths = new List<String>();
+            using var transaction = await _dbContext.Database.BeginTransactionAsync();
             try
             {
+
+                // Validate ColorId
+                if (await _dbContext.Colors.FirstOrDefaultAsync(c => c.Id == model.ColorId) == null)
+                    return new ProductVariationResponseModel { message = "Invalid ColorId. There is no color with this ID." };
+
+                // Validate SizeId
+                if (await _dbContext.Sizes.FirstOrDefaultAsync(c => c.Id == model.SizeId) == null)
+                    return new ProductVariationResponseModel { message = "Invalid SizeId. There is no size with this ID." };
+
+                var product = await _dbContext.Products.FirstOrDefaultAsync(p => p.Id == productId);
+                if (product == null)
+                    return new ProductVariationResponseModel { message = "Invalid product Id. There is no products with this ID." };
+                if (product.isDeleted == true)
+                    return new ProductVariationResponseModel { message = "please reactivate this product first!" };
+
+
+                // Check if a variation already exists with the same ProductId, ColorId, and SizeId
+                var existingVariation = await _dbContext.ProductVariations
+                    .FirstOrDefaultAsync(v => v.ProductId == productId &&
+                                              v.ColorId == model.ColorId &&
+                                              v.SizeId == model.SizeId);
+
                 if (existingVariation != null)
                 {
                     // If the variation is not soft-deleted, return an error message
@@ -500,6 +501,19 @@ namespace SimpleECommerce.Services
             variation.Sku = model.Sku;
             variation.MainProductVariationPhoto = theNewPhotos[0].Path;
 
+            // update cart rows if the new quantity in stock is less than the quantity in cart
+            var cartRows = await _dbContext.CartRows
+            .Where(cr => cr.ProductVariationId == variationId && cr.Quantity > variation.QuantityInStock)
+            .ToListAsync();
+
+            if (cartRows.Any())
+            {
+                foreach (var cartRow in cartRows)
+                {
+                    cartRow.Quantity = variation.QuantityInStock;
+                }
+            }
+
             await _dbContext.SaveChangesAsync();
 
             var result = MapToVariationResponse(variation);
@@ -598,6 +612,19 @@ namespace SimpleECommerce.Services
                 variation.MainProductVariationPhoto = newPhotosPaths[0];
                 // delete old mainProdPhoto
                 await _transferPhotosToPath.DeleteFileAsync(oldMainVarPhoto);
+            }
+
+            // update cart rows if the new quantity in stock is less than the quantity in cart
+            var cartRows = await _dbContext.CartRows
+            .Where(cr => cr.ProductVariationId == model.variationId && cr.Quantity > model.quantityInStock)
+            .ToListAsync();
+
+            if (cartRows.Any())
+            {
+                foreach (var cartRow in cartRows)
+                {
+                    cartRow.Quantity = model.quantityInStock;
+                }
             }
 
             await _dbContext.SaveChangesAsync();
