@@ -187,6 +187,7 @@ namespace SimpleECommerce.Controllers
             return Ok(result);
         }
 
+        // colors
         [HttpPost("AddColor")]
         public async Task<IActionResult> AddNewColor([FromBody] string value)
         {
@@ -210,6 +211,20 @@ namespace SimpleECommerce.Controllers
             });
             return Ok(result);
         }
+
+        // sizes
+        [HttpPost("AddSize")]
+        public async Task<IActionResult> AddNewSize([FromBody] string value)
+        {
+            if (!ModelState.IsValid)
+                return BadRequest(ModelState);
+
+            var result = await _prodService.addSize(value);
+            if (result.message != "")
+                return BadRequest(result.message);
+
+            return Ok(result);
+        }
         [HttpGet("GetSizes")]
         public async Task<IActionResult> getSizes()
         {
@@ -221,6 +236,5 @@ namespace SimpleECommerce.Controllers
             });
             return Ok(result);
         }
-
     }
 }

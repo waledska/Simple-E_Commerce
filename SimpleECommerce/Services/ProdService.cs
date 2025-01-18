@@ -299,7 +299,9 @@ namespace SimpleECommerce.Services
             using var transaction = await _dbContext.Database.BeginTransactionAsync();
             try
             {
-
+                // quantity in stock can't be less than 0!
+                if (model.QuantityInStock < 0)
+                    return new ProductVariationResponseModel { message = "quantity for productVariaiton in stock can't be less than 0!" };
                 // Validate ColorId
                 if (await _dbContext.Colors.FirstOrDefaultAsync(c => c.Id == model.ColorId) == null)
                     return new ProductVariationResponseModel { message = "Invalid ColorId. There is no color with this ID." };
@@ -465,6 +467,8 @@ namespace SimpleECommerce.Services
 
             if (variation == null || variation.isDeleted)
                 return new ProductVariationResponseModel { message = "Variation not found or it is deleted please reactivate it first!" };
+            if (model.QuantityInStock < 0)
+                return new ProductVariationResponseModel { message = "quantity for productVariaiton in stock can't be less than 0!" };
 
             // update photos for prodVariation 
             // 1- try to add the new photos first 
@@ -503,14 +507,20 @@ namespace SimpleECommerce.Services
 
             // update cart rows if the new quantity in stock is less than the quantity in cart
             var cartRows = await _dbContext.CartRows
-            .Where(cr => cr.ProductVariationId == variationId && cr.Quantity > variation.QuantityInStock)
+            .Where(cr => cr.ProductVariationId == variationId)
             .ToListAsync();
 
             if (cartRows.Any())
             {
+
                 foreach (var cartRow in cartRows)
                 {
-                    cartRow.Quantity = variation.QuantityInStock;
+                    // decreasing for the cartRow quantity
+                    if (cartRow.Quantity > variation.QuantityInStock)
+                        cartRow.Quantity = variation.QuantityInStock;
+                    // increasing for the cartRow quantity
+                    if (cartRow.Quantity <= 0 && variation.QuantityInStock > 0)
+                        cartRow.Quantity = 1;
                 }
             }
 
@@ -577,6 +587,8 @@ namespace SimpleECommerce.Services
             if (variation == null || !variation.isDeleted)
                 return new ProductVariationResponseModel { message = "Variation not found or already active." };
 
+            if (model.quantityInStock < 0)
+                return new ProductVariationResponseModel { message = "quantity for productVariaiton in stock can't be less than 0!" };
             // Reactivate the variation
             variation.isDeleted = false;
 
@@ -691,7 +703,7 @@ namespace SimpleECommerce.Services
         public async Task<AddColorResponseModel> addColor(string value)
         {
             if (await _dbContext.Colors.FirstOrDefaultAsync(c => c.Value == value) != null)
-                return new AddColorResponseModel { message = "this color value is already stored!" };
+                return new AddColorResponseModel { message = "this Color value is already stored!" };
 
             // storing the new color 
             var newColor = new Color
@@ -707,9 +719,24 @@ namespace SimpleECommerce.Services
         {
             return await _dbContext.Colors.ToListAsync();
         }
+        // Sizes [C - R]
         public async Task<List<Size>> getSizes()
         {
             return await _dbContext.Sizes.ToListAsync();
+        }
+        public async Task<AddSizeResponseModel> addSize(string value)
+        {
+            if (await _dbContext.Sizes.FirstOrDefaultAsync(c => c.Value == value) != null)
+                return new AddSizeResponseModel { message = "this Size value is already stored!" };
+
+            // storing the new size 
+            var newSize = new Size
+            {
+                Value = value
+            };
+            await _dbContext.Sizes.AddAsync(newSize);
+            await _dbContext.SaveChangesAsync();
+            return new AddSizeResponseModel { message = "", Id = newSize.Id, Value = newSize.Value };
         }
 
 

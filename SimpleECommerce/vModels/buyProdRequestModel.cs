@@ -5,12 +5,8 @@ namespace SimpleECommerce.vModels
 {
     public class buyProdRequestModel
     {
-        public buyProdRequestModel()
-        {
-            productVariation = new ProductVariation();
-        }
         [Required]
-        public ProductVariation productVariation { get; set; }
+        public int variaitonId { get; set; }
         [Required]
         [Range(0, 100, ErrorMessage = "Quantity must be between 0 and 100.")]
         public int quantity { get; set; }

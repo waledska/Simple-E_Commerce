@@ -31,6 +31,8 @@ namespace SimpleECommerce.Services
         // Color (CR)
         Task<AddColorResponseModel> addColor(string value);
         Task<List<Color>> getColors();
+        // Size (CR)
+        Task<AddSizeResponseModel> addSize(string value);
         Task<List<Size>> getSizes();
     }
 }

@@ -4,6 +4,8 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Threading.Tasks;
 using System.Linq;
+using SimpleECommerce.Helpers;
+using Microsoft.Extensions.Options;
 
 namespace SimpleECommerce.Controllers
 {
@@ -12,10 +14,12 @@ namespace SimpleECommerce.Controllers
     public class CartOrdersController : ControllerBase
     {
         private readonly ICartOrdersService _cartOrdersService;
-
-        public CartOrdersController(ICartOrdersService cartOrdersService)
+        // for testing
+        private readonly orderStatuses _OrderStatuses;
+        public CartOrdersController(ICartOrdersService cartOrdersService, IOptions<orderStatuses> orderStatuses)
         {
             _cartOrdersService = cartOrdersService;
+            _OrderStatuses = orderStatuses.Value;
         }
         [Authorize(AuthenticationSchemes = "Bearer")]
         [HttpPost("addItemToMyCart")]
@@ -65,6 +69,24 @@ namespace SimpleECommerce.Controllers
             if (result != "")
                 return BadRequest(result);
             return Ok();
+        }
+        [Authorize(AuthenticationSchemes = "Bearer")]
+        [HttpPost("buyProduct")]
+        public async Task<IActionResult> buyProduct([FromBody] buyProdRequestModel model)
+        {
+            if (!ModelState.IsValid)
+                return BadRequest(ModelState);
+
+            var result = await _cartOrdersService.buyProdAsync(model);
+            if (result != "")
+                return BadRequest(result);
+            return Ok();
+        }
+        /// for testing!
+        [HttpGet("orderStatus")]
+        public async Task<IActionResult> orderStatus()
+        {
+            return Ok("the status from orderStatuses =>" + _OrderStatuses.pending);
         }
 
 

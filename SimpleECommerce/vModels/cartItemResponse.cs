@@ -17,6 +17,7 @@ namespace SimpleECommerce.vModels
         public int QuantityOfVarInCart { get; set; }
         // variaiton data
         public int variaitonId { get; set; }
+        public int QuantityOfVariaitonInStock { get; set; }
         public bool isVariationDeleted { get; set; }
         public string mainVarPhoto { get; set; }
         public string colorValue { get; set; }

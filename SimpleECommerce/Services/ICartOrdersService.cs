@@ -16,9 +16,9 @@ namespace SimpleECommerce.Services
         // //[ForUser]
         Task<string> cartCheckOutAsync(int addressId);
         Task<string> buyProdAsync(buyProdRequestModel model);
-        Task<List<orderWithOutDetails>> GetMyOrdersAsync(); // in the client chould make filterationBy orderStatus
+        Task<List<orderWithOutDetails>> GetMyOrdersAsync(); // in the client should make filterationBy orderStatus
         Task<Order> GetOrderDetailsAsync(int orderId);
-        Task<string> deleteOrderbyUserAsync(int orderId); // [In 8 h]
+        Task<string> deleteOrderbyUserAsync(int orderId); // [In 8 h] // soft delete -> by update order status to Cancelled!
 
         //[ForAdmin]
         Task<List<orderWithOutDetails>> GetAllUsersOrdersAsync(string userId = null,

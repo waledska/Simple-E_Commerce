@@ -15,13 +15,13 @@ namespace SimpleECommerce.Services
         private readonly IAuthService _authService;
         private readonly IProdService _prodService;
         private readonly ILogger<CartOrdersService> _logger;
-        private readonly orderStatusesData _orderStatusData;
+        private readonly orderStatuses _orderStatusData;
 
         public CartOrdersService(ApplicationDbContext dbContext
         , IAuthService authService
         , IProdService prodService
         , ILogger<CartOrdersService> logger
-        , IOptions<orderStatusesData> orderStatusDataOptions)
+        , IOptions<orderStatuses> orderStatusDataOptions)
         {
             _dbContext = dbContext;
             _authService = authService;
@@ -37,6 +37,9 @@ namespace SimpleECommerce.Services
             var variation = await _dbContext.ProductVariations.FirstOrDefaultAsync(v => v.Id == model.variationId);
             if (variation == null || variation.isDeleted)
                 return "invalid variation id, there is no available variations with this id! ";
+
+            if (model.quantity <= 0)
+                return "invalid quantity, quantity can't be <= 0";
 
             if (variation.QuantityInStock < model.quantity)
                 return "this amount isn't available in stock for this item!";
@@ -78,6 +81,7 @@ namespace SimpleECommerce.Services
                 cartRowId = cr.Id,
                 QuantityOfVarInCart = cr.Quantity,
                 variaitonId = cr.ProductVariationId,
+                QuantityOfVariaitonInStock = cr.ProductVariation.QuantityInStock,
                 isVariationDeleted = cr.ProductVariation.isDeleted,
                 mainVarPhoto = cr.ProductVariation.MainProductVariationPhoto,
                 sizeValue = cr.ProductVariation.Size.Value,
@@ -85,7 +89,7 @@ namespace SimpleECommerce.Services
                 productId = cr.ProductVariation.Product.Id,
                 productDescription = cr.ProductVariation.Product.Description ?? "this product without discription",
                 productName = cr.ProductVariation.Product.Name,
-                productPrice = cr.ProductVariation.Product.Price,
+                productPrice = cr.ProductVariation.Product.Price
             }).ToListAsync();
 
             return result;
@@ -101,6 +105,8 @@ namespace SimpleECommerce.Services
                 .FirstOrDefaultAsync();
             if (Item == null)
                 return "this item isn't available in your cart";
+            if (model.quantity <= 0)
+                return "invalid quantity, quantity can't be <= 0";
             // check if the new amount available in Stocks
             if (Item.ProductVariation.QuantityInStock < model.quantity)
                 return "this amount isn't available in stock for this item!";
@@ -167,18 +173,22 @@ namespace SimpleECommerce.Services
                         return $"Insufficient stock for Product Variation ID: {productVariation.Id}.";
                     if (cartItem.ProductVariation.isDeleted)
                         return $"productVariaiton with ID: {productVariation.Id} isn't available any more!";
+                    if (cartItem.Quantity <= 0)
+                        return $"productVariaiton with ID: {productVariation.Id} increase it's quantity in cart First!";
+                    if (cartItem.Quantity <= 0 || cartItem.ProductVariation.QuantityInStock <= 0)
+                        return $"productVariaiton with ID: {productVariation.Id} isn't available in stock!";
 
                     totalAmount += cartItem.ProductVariation.Product.Price * cartItem.Quantity;
                     cartItem.ProductVariation.QuantityInStock -= cartItem.Quantity;
                 }
-
                 // creating new order!
                 var newOrder = new Order
                 {
                     AddressId = addressId,
                     DateOfOrder = DateTime.UtcNow,
-                    OrderStatus = _orderStatusData.Pending,
-                    TotalAmount = totalAmount
+                    OrderStatus = _orderStatusData.pending,
+                    TotalAmount = totalAmount,
+                    UserId = currentUserId
                 };
 
                 await _dbContext.Orders.AddAsync(newOrder);
@@ -195,27 +205,24 @@ namespace SimpleECommerce.Services
                 }).ToList();
 
                 // insert new order rows
-                await _dbContext.AddRangeAsync(newOrderRows);
+                await _dbContext.OrderRows.AddRangeAsync(newOrderRows);
 
                 // empty the cart of the user 
                 _dbContext.CartRows.RemoveRange(cartRows);
 
                 // after checkOut after decreasing the amount of prodVars in stocks updates the cart Rows for those prodVars
-                //var cartRowsVarIds = cartRows.Select(cr => cr.ProductVariationId).ToList();
-                var affectedRowsInUsersCart = await _dbContext.CartRows
+                var affectedVariaitonIds = cartRows.Select(cr => cr.ProductVariationId).Distinct().ToList();
+                var affectedCartRowsNeedUpdate = await _dbContext.CartRows
                     .Where(cr =>
-                        cartRows
-                        .Any(c => c.ProductVariationId == cr.ProductVariationId && c.ProductVariation.QuantityInStock < cr.Quantity)
+                        affectedVariaitonIds.Contains(cr.ProductVariationId)
+                        && cr.Quantity > cr.ProductVariation.QuantityInStock
                     )
+                    .Include(cr => cr.ProductVariation)
                     .ToListAsync();
 
-                foreach (var affectedRowInUsersCart in affectedRowsInUsersCart)
+                foreach (var affectedCartRowNeedUpdate in affectedCartRowsNeedUpdate)
                 {
-                    var matchingCartRow = cartRows.FirstOrDefault(c => c.ProductVariationId == affectedRowInUsersCart.ProductVariationId);
-                    if (matchingCartRow != null)
-                    {
-                        affectedRowInUsersCart.Quantity = matchingCartRow.ProductVariation.QuantityInStock;
-                    }
+                    affectedCartRowNeedUpdate.Quantity = affectedCartRowNeedUpdate.ProductVariation.QuantityInStock;
                 }
 
 
@@ -242,7 +249,91 @@ namespace SimpleECommerce.Services
         }
         public async Task<string> buyProdAsync(buyProdRequestModel model)
         {
-            throw new NotImplementedException();
+            using var transaction = await _dbContext.Database.BeginTransactionAsync();
+            try
+            {
+                var currentUserId = _authService.getUserId();
+                if (await _dbContext.Addresses.FirstOrDefaultAsync(a => a.Id == model.addressId && a.UserId == currentUserId) == null)
+                    return "there is no addresses asigned to current user with this address Id";
+
+                var variation = await _dbContext.ProductVariations
+                    .Include(pv => pv.Product)
+                    .FirstOrDefaultAsync(pv => pv.Id == model.variaitonId);
+                if (variation == null)
+                    return "invalid productVariaiotnId. there is no variations with this ID!";
+                if (model.quantity <= 0)
+                    return $"quantity can't be equal 0!";
+
+                // if amount is not available or variation soft deleted
+                if (model.quantity > variation.QuantityInStock)
+                    return $"Insufficient stock for Product Variation ID: {variation.Id}.";
+                if (variation.isDeleted)
+                    return $"productVariaiton with ID: {variation.Id} isn't available any more!";
+                if (variation.QuantityInStock <= 0)
+                    return $"productVariaiton with ID: {variation.Id} isn't available in stock!";
+
+                // calc totalPrice and update quantity in stock
+                var totalAmount = variation.Product.Price * model.quantity;
+                variation.QuantityInStock -= model.quantity;
+
+                // creating new order!
+                var newOrder = new Order
+                {
+                    AddressId = model.addressId,
+                    DateOfOrder = DateTime.UtcNow,
+                    OrderStatus = _orderStatusData.pending,
+                    TotalAmount = totalAmount,
+                    UserId = currentUserId
+                };
+
+                await _dbContext.Orders.AddAsync(newOrder);
+                // saving new order
+                await _dbContext.SaveChangesAsync();
+
+                // insert the new order's row
+                await _dbContext.OrderRows.AddAsync(new OrderRow
+                {
+                    OrderId = newOrder.Id,
+                    ProductVariationId = model.variaitonId,
+                    Quantity = model.quantity,
+                    PriceForProduct = variation.Product.Price
+                });
+
+                // after checkOut after decreasing the amount of prodVars in stocks updates the cart Rows for those prodVars
+                var affectedCartRowsNeedUpdate = await _dbContext.CartRows
+                    .Where(cr =>
+                        cr.ProductVariationId == model.variaitonId
+                        && model.quantity > cr.ProductVariation.QuantityInStock
+                    )
+                    .Include(cr => cr.ProductVariation)
+                    .ToListAsync();
+
+                foreach (var affectedCartRowNeedUpdate in affectedCartRowsNeedUpdate)
+                {
+                    affectedCartRowNeedUpdate.Quantity = affectedCartRowNeedUpdate.ProductVariation.QuantityInStock;
+                }
+
+
+                // save => new order rows, empty cart, decrease the quantity in cart Rows for the affected proVariations If needed
+                await _dbContext.SaveChangesAsync();
+
+                // Commit the transaction
+                await transaction.CommitAsync();
+
+                return "";
+            }
+            catch (DbUpdateConcurrencyException ex)
+            {
+                await transaction.RollbackAsync();
+                _logger.LogError(ex, "Concurrency conflict occurred while placing the order.");
+                return "The order could not be completed due to a concurrency issue. Please try again.";
+            }
+            catch (Exception ex)
+            {
+                await transaction.RollbackAsync();
+                _logger.LogError(ex, "failed to save Order!");
+                throw;
+            }
         }
 
         public async Task<List<orderWithOutDetails>> GetMyOrdersAsync()

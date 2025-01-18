@@ -27,7 +27,7 @@ builder.Logging.AddDebug();
 builder.Services.Configure<JWT>(builder.Configuration.GetSection("JWT"));
 
 // configuration to map the data from appsetings to class orderStatusData
-builder.Services.Configure<orderStatusesData>(builder.Configuration.GetSection("OrderStatuses"));
+builder.Services.Configure<orderStatuses>(builder.Configuration.GetSection("orderStatuses"));
 
 // assign the connection string variable with it's data
 var connectionString = builder.Configuration.GetConnectionString("defaultConnection");
