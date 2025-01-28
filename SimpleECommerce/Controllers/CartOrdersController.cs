@@ -6,6 +6,8 @@ using System.Threading.Tasks;
 using System.Linq;
 using SimpleECommerce.Helpers;
 using Microsoft.Extensions.Options;
+using SimpleECommerce.DataAndContext;
+using Microsoft.EntityFrameworkCore;
 
 namespace SimpleECommerce.Controllers
 {
@@ -14,13 +16,13 @@ namespace SimpleECommerce.Controllers
     public class CartOrdersController : ControllerBase
     {
         private readonly ICartOrdersService _cartOrdersService;
-        // for testing
-        private readonly orderStatuses _OrderStatuses;
-        public CartOrdersController(ICartOrdersService cartOrdersService, IOptions<orderStatuses> orderStatuses)
+        private readonly ApplicationDbContext _dbContext;
+        public CartOrdersController(ICartOrdersService cartOrdersService, ApplicationDbContext dbContext)
         {
             _cartOrdersService = cartOrdersService;
-            _OrderStatuses = orderStatuses.Value;
+            _dbContext = dbContext;
         }
+        // USER
         [Authorize(AuthenticationSchemes = "Bearer")]
         [HttpPost("addItemToMyCart")]
         public async Task<IActionResult> addItemToMyCart([FromBody] addItemToCartModel model)
@@ -82,13 +84,59 @@ namespace SimpleECommerce.Controllers
                 return BadRequest(result);
             return Ok();
         }
-        /// for testing!
-        [HttpGet("orderStatus")]
-        public async Task<IActionResult> orderStatus()
+        [Authorize(AuthenticationSchemes = "Bearer")]
+        [HttpGet("GetMyOrders")]
+        public async Task<IActionResult> GetMyOrders()
         {
-            return Ok("the status from orderStatuses =>" + _OrderStatuses.pending);
+            var result = await _cartOrdersService.GetMyOrdersAsync();
+            return Ok(result);
+        }
+        [Authorize(AuthenticationSchemes = "Bearer")]
+        [HttpGet("GetOrderDetails/{orderId}")]
+        public async Task<IActionResult> GetOrderDetails(int orderId)
+        {
+            var result = await _cartOrdersService.GetOrderDetailsAsync(orderId);
+
+            if (result == null)
+                return NotFound(new { message = "Order not found" });
+            return Ok(result);
+        }
+        [Authorize(AuthenticationSchemes = "Bearer")]
+        [HttpPut("deleteOrderbyUser/{orderId}")]
+        public async Task<IActionResult> deleteOrderbyUser(int orderId)
+        {
+            var result = await _cartOrdersService.deleteOrderbyUserAsync(orderId);
+
+            if (result != "")
+                return BadRequest(result);
+            return Ok(result);
         }
 
+        [Authorize(AuthenticationSchemes = "Bearer", Roles = "admin")]
+        [HttpGet("GetAllUsersOrders")]
+        public async Task<IActionResult> GetAllUsersOrders(
+        [FromQuery] string? userId = null,
+        [FromQuery] string? orderStatus = null,
+        [FromQuery] int? orderId = null,
+        [FromQuery] string? phoneNumber = null,
+        [FromQuery] string? userName = null)
+        {
+            var result = await _cartOrdersService.GetAllUsersOrdersAsync(userId, orderStatus, orderId, phoneNumber, userName);
+            return Ok(result);
+        }
 
+        [Authorize(AuthenticationSchemes = "Bearer", Roles = "admin")]
+        [HttpPut("updateOrderStatus")]
+        public async Task<IActionResult> updateOrderStatus([FromBody] updateOrderStatus model)
+        {
+            if (!ModelState.IsValid)
+                return BadRequest(ModelState);
+
+            var result = await _cartOrdersService.updateOrderStatusAsync(model);
+
+            if (result != "")
+                return BadRequest(result);
+            return Ok(result);
+        }
     }
 }

@@ -20,6 +20,7 @@ namespace SimpleECommerce.Services
     public class AuthService : IAuthService
     {
         private readonly UserManager<ApplicationUser> _userManager;
+        private readonly RoleManager<IdentityRole> _roleManager;
         private readonly JWT _jwt;
         private readonly IHttpContextAccessor _httpContextAccessor;
         private readonly IMemoryCache _memoryCache;
@@ -30,6 +31,7 @@ namespace SimpleECommerce.Services
 
         public AuthService(
             UserManager<ApplicationUser> userManager,
+            RoleManager<IdentityRole> roleManager,
             IOptions<JWT> jwtOptions,
             IHttpContextAccessor httpContextAccessor,
             IMemoryCache memoryCache,
@@ -39,6 +41,7 @@ namespace SimpleECommerce.Services
             )
         {
             _userManager = userManager;
+            _roleManager = roleManager;
             _jwt = jwtOptions.Value;
             _httpContextAccessor = httpContextAccessor;
             _memoryCache = memoryCache;
@@ -134,6 +137,9 @@ namespace SimpleECommerce.Services
 
                 return new registerResult { Message = errors };
             }
+            // assign role user to any new user by default
+            await _userManager.AddToRoleAsync(newUser, "user");
+
             await UseOtpForUserAsync(new VerificationOtp { OTP = model.OTPforEmailConfirmaiton, userEmail = model.email });
 
             // select the user with his full data
@@ -247,6 +253,54 @@ namespace SimpleECommerce.Services
 
             return message;
         }
+        // for Roles area => addRoleAdminToUser, removeRoleAdminFromUser, getUserRoles
+        public async Task<string> AddRoleAdminToUserAsync(string userEmail)
+        {
+            var user = await _userManager.FindByEmailAsync(userEmail);
+            if (user == null)
+                return $"User with email '{userEmail}' not found.";
+
+            // Check if user is already in role admin
+            if (await _userManager.IsInRoleAsync(user, "admin"))
+                return $"User: '{userEmail}' is already in the role admin.";
+
+            var result = await _userManager.AddToRoleAsync(user, "admin");
+            if (!result.Succeeded)
+            {
+                var errors = string.Join(", ", result.Errors.Select(e => e.Description));
+                return $"Failed to add role to user: {errors}";
+            }
+
+            return "";
+        }
+        public async Task<string> RemoveRoleAdminFromUserAsync(string userEmail)
+        {
+            var user = await _userManager.FindByEmailAsync(userEmail);
+            if (user == null)
+                return $"User with email '{userEmail}' not found.";
+
+            // Check if user is in that role
+            if (!await _userManager.IsInRoleAsync(user, "admin"))
+                return $"User: '{userEmail}' is not in role: admin'.";
+
+            var result = await _userManager.RemoveFromRoleAsync(user, "admin");
+            if (!result.Succeeded)
+            {
+                var errors = string.Join(", ", result.Errors.Select(e => e.Description));
+                return $"Failed to remove role from user: {errors}";
+            }
+
+            return "";
+        }
+        public async Task<IList<string>> GetUserRolesAsync(string userEmail)
+        {
+            var user = await _userManager.FindByEmailAsync(userEmail);
+            if (user == null)
+                return new List<string>();
+
+            return await _userManager.GetRolesAsync(user);
+        }
+
 
         // for Addresses Area:-
         // Adding an address for a user
@@ -382,13 +436,6 @@ namespace SimpleECommerce.Services
             return "Default address updated successfully";
         }
 
-        // Helper method to get the user ID from the token
-        // public string getUserId()
-        // {
-        //     // Assume this method extracts and validates the user ID from the token
-        //     return _userManager.GetUserId(_httpContextAccessor.HttpContext.User);
-        // }
-
         // more helping functions
 
         // for creating Token by JWT
@@ -486,8 +533,7 @@ namespace SimpleECommerce.Services
 
 
 
-            return ""; // you should use this if the mailSender is working perffect #
-                       //return otp; /////////////////// this modification only and above!!!
+            return "";
         }
 
         private async Task<bool> UseOtpForUserAsync(VerificationOtp request)

@@ -1,37 +1,22 @@
 ﻿using System.Net;
 using System.Net.Mail;
+using Microsoft.Extensions.Options;
+using SimpleECommerce.Helpers;
 
 namespace SimpleECommerce.Services
 {
     public class EmailSender : IEmailSender
     {
-        //public Task SendEmailAsync(string email, string subject, string message)
-        //{
-        //    // the data for sender Email
-        //    var senderMail = "hoda10000000@gmail.com";
-        //    var pw = "kjoxiiuzbjptziws";
-
-        //    var client = new SmtpClient("smtp.gmail.com", 587)
-        //    {
-        //        EnableSsl = true,
-        //        Credentials = new NetworkCredential(senderMail, pw)
-        //    };
-
-        //    return client.SendMailAsync(
-        //        new MailMessage(from: senderMail,
-        //        to: email,
-        //        subject,
-        //        message
-        //        ));
-        //}
-
-
-
+        private readonly usedDataForEmailSender _usedDataForEmailSender;
+        public EmailSender(IOptions<usedDataForEmailSender> usedDataForEmailSender)
+        {
+            _usedDataForEmailSender = usedDataForEmailSender.Value;
+        }
         public Task SendEmailAsync(string email, string subject, string htmlMessage)
         {
-            var senderMail = "ska000000001@gmail.com";
+            var senderMail = _usedDataForEmailSender.email;
             // Sender password
-            var pw = "ujtfsgtwzmikkjod";
+            var pw = _usedDataForEmailSender.senderPass;
 
             // Create a new SMTP client using Gmail's SMTP server settings
             var client = new SmtpClient("smtp.gmail.com", 587)

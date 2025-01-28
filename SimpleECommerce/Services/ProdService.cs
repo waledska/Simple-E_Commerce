@@ -60,10 +60,6 @@ namespace SimpleECommerce.Services
             if (theCat.Value == model.value)
                 return new CategoryModel { message = "this is the same name for this category!" };
 
-            // var oldOneWithSameName = await _dbContext.Categories.FirstOrDefaultAsync(c => c.Value == model.value);
-            // if (oldOneWithSameName != null)
-            //     return new CategoryModel { message = "this new category name is already used for another one!" };
-
             theCat.Value = model.value;
             _dbContext.Categories.Update(theCat);
             await _dbContext.SaveChangesAsync();
@@ -117,13 +113,12 @@ namespace SimpleECommerce.Services
         public async Task<IEnumerable<ProductResponseModel>> ShowProductsAsync()
         {
             var products = await _dbContext.Products
-                //.Where(p => !p.isDeleted) // Exclude deleted products
                 .Include(p => p.Category)
-                .Include(p => p.ProductVariations/*.Where(v => !v.isDeleted)*/) // Exclude deleted variations
+                .Include(p => p.ProductVariations)
                 .ThenInclude(v => v.Color)
-                .Include(p => p.ProductVariations/*.Where(v => !v.isDeleted)*/)
+                .Include(p => p.ProductVariations)
                 .ThenInclude(v => v.Size)
-                .Include(p => p.ProductVariations/*.Where(v => !v.isDeleted)*/)
+                .Include(p => p.ProductVariations)
                 .ThenInclude(v => v.Photos)
                 .AsNoTracking().ToListAsync();
 
@@ -337,49 +332,6 @@ namespace SimpleECommerce.Services
                     {
                         message = "this variation data is already stored you need to reactivate it only!"
                     };
-
-                    // // Reactivate the soft-deleted variation ////////------------- i need to remove recativation variaiton from here only in her hethod 
-
-                    // existingVariation.isDeleted = false;
-                    // existingVariation.QuantityInStock = model.QuantityInStock;
-                    // existingVariation.Sku = model.Sku;
-
-
-                    // // Handle photo updates for the reactivated variation
-                    // if (model.photosFiles?.Any() == true) // ------------------------------------------------------------->
-                    // {
-                    //     var photosToAdd = new List<Photo>();
-                    //     newPhotosPaths = await _transferPhotosToPath.GetPhotosPathAsync(model.photosFiles);
-                    //     foreach (var path in newPhotosPaths)
-                    //     {
-                    //         if (path.StartsWith("error, "))
-                    //         {
-                    //             if (photosToAdd.Any())
-                    //             {
-                    //                 foreach (var photoPath in newPhotosPaths)
-                    //                 {
-                    //                     if (!photoPath.StartsWith("error, "))
-                    //                         await _transferPhotosToPath.DeleteFileAsync(photoPath);
-                    //                 }
-                    //             }
-                    //             return new ProductVariationResponseModel { message = path };
-                    //         }
-
-                    //         // Check if the photo already exists before adding
-                    //         var existingPhoto = await _dbContext.Photos
-                    //             .FirstOrDefaultAsync(p => p.ProductVariationId == existingVariation.Id && p.Path == path);
-
-                    //         if (existingPhoto == null)
-                    //         {
-                    //             photosToAdd.Add(new Photo { ProductVariationId = existingVariation.Id, Path = path });
-                    //         }
-                    //     }
-                    //     await _dbContext.Photos.AddRangeAsync(photosToAdd);
-                    //     existingVariation.MainProductVariationPhoto = photosToAdd[0].Path;
-                    // }
-
-                    // await _dbContext.SaveChangesAsync();
-                    // return MapToVariationResponse(existingVariation);
                 }
 
                 // If no existing variation is found, create a new one
@@ -560,10 +512,6 @@ namespace SimpleECommerce.Services
             {
                 // Hard delete the variation
                 _dbContext.ProductVariations.Remove(variation);
-
-                // var photosPathsNotAllowedToDelete = await _dbContext.OrderRows
-                //     .Select(or => or.MainProductVariationPhoto)
-                //     .ToListAsync();
 
                 foreach (var photo in variation.Photos)
                 {
@@ -749,7 +697,7 @@ namespace SimpleECommerce.Services
                 .Include(p => p.ProductVariations.Where(v => !v.isDeleted)) // Exclude soft-deleted variations
                 .ThenInclude(v => v.Color)
                 .Include(p => p.ProductVariations.Where(v => !v.isDeleted))
-                .ThenInclude(v => v.Size)
+                .ThenInclude(v => v.Size).AsNoTracking()
                 .FirstOrDefaultAsync();
 
             if (product == null) return null;
@@ -772,7 +720,6 @@ namespace SimpleECommerce.Services
                     value = product.Category.Value
                 },
                 Variations = product.ProductVariations
-                // .Where(v => v.isDeleted) // Exclude soft-deleted variations
                 .Select(MapToVariationResponse)
                 .ToList()
             };

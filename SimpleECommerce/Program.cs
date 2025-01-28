@@ -10,6 +10,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using System.Text;
+using System.Text.Json.Serialization;
 //using System.Text.Json.Serialization;
 
 
@@ -26,8 +27,13 @@ builder.Logging.AddDebug();
 // configuration to map the data from appsetings to class JWT
 builder.Services.Configure<JWT>(builder.Configuration.GetSection("JWT"));
 
+// configuration to map the data from appsetings to class usedDataForEmailSender
+builder.Services.Configure<usedDataForEmailSender>(builder.Configuration.GetSection("usedDataForEmailSender"));
+
 // configuration to map the data from appsetings to class orderStatusData
 builder.Services.Configure<orderStatuses>(builder.Configuration.GetSection("orderStatuses"));
+// configuration to map the data from appsetings to class AmountOfTimeUserAbleToCancellOrder
+builder.Services.Configure<AmountOfTimeUserAbleToCancellOrder>(builder.Configuration.GetSection("AmountOfTimeUserAbleToCancellOrder"));
 
 // assign the connection string variable with it's data
 var connectionString = builder.Configuration.GetConnectionString("defaultConnection");
@@ -75,14 +81,14 @@ builder.Services.Configure<DataProtectionTokenProviderOptions>(op =>
     op.TokenLifespan = TimeSpan.FromHours(1);
 });
 
-//builder.Services.AddControllers();
 // Add services to the container.
-builder.Services.AddControllers();
-// .AddJsonOptions(options =>
-// {
-//     options.JsonSerializerOptions.ReferenceHandler = ReferenceHandler.Preserve;
-//     options.JsonSerializerOptions.WriteIndented = true; // Optional: for readable JSON
-// });
+builder.Services.AddControllers()
+.AddJsonOptions(options =>
+{
+    options.JsonSerializerOptions.ReferenceHandler = ReferenceHandler.Preserve;
+    options.JsonSerializerOptions.WriteIndented = true; // Optional: for readable JSON
+});
+
 builder.Services.AddMemoryCache();
 
 // Add HttpContextAccessor service this is for make func getUserId...
@@ -125,6 +131,22 @@ builder.Services.AddSwaggerGen(c =>
 
 var app = builder.Build();
 
+// 1) Create a scope for services
+using (var scope = app.Services.CreateScope())
+{
+    var services = scope.ServiceProvider;
+    try
+    {
+        // 2) Seed roles and initial admin user
+        await SeedRolesAndAdminAsync(services);
+    }
+    catch (Exception ex)
+    {
+        // You might want to log the exception here.
+        Console.WriteLine($"Error seeding roles/admin user: {ex.Message}");
+    }
+}
+
 
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
@@ -144,3 +166,53 @@ app.UseMiddleware<JwtMiddleware>();
 app.MapControllers();
 
 app.Run();
+
+
+// 3) Create the seeding method
+static async Task SeedRolesAndAdminAsync(IServiceProvider serviceProvider)
+{
+    // Retrieve RoleManager and UserManager from DI
+    var roleManager = serviceProvider.GetRequiredService<RoleManager<IdentityRole>>();
+    var userManager = serviceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+
+    // Ensure the roles exist
+    string[] roleNames = { "admin", "user" };
+    foreach (var roleName in roleNames)
+    {
+        bool roleExists = await roleManager.RoleExistsAsync(roleName);
+        if (!roleExists)
+        {
+            await roleManager.CreateAsync(new IdentityRole(roleName));
+        }
+    }
+
+    // Create an admin user if not exists
+    string adminEmail = "admin@example.com";
+    string adminPassword = "Admin123#KLJHItuy&*^*8768";     // You can store it in secrets/config.
+    var existingAdminUser = await userManager.FindByEmailAsync(adminEmail);
+
+    if (existingAdminUser == null)
+    {
+        var adminUser = new ApplicationUser
+        {
+            UserName = "admin",     // Could be anything, e.g. "superadmin"
+            Email = adminEmail,
+            EmailConfirmed = true,  // By default mark it confirmed
+            TokenForRessetingPass = ""
+        };
+
+        var createAdminResult = await userManager.CreateAsync(adminUser, adminPassword);
+        if (createAdminResult.Succeeded)
+        {
+            // Assign the "admin" role
+            await userManager.AddToRoleAsync(adminUser, "admin");
+        }
+        else
+        {
+            // Handle creation errors if needed (logging, etc.)
+            var errors = string.Join(", ", createAdminResult.Errors.Select(e => e.Description));
+            Console.WriteLine("Failed to create admin user: " + errors);
+        }
+    }
+}
+

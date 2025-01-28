@@ -81,6 +81,36 @@ namespace SimpleECommerce.Controllers
             return result == "" ? Ok("Password reset successfully.") : BadRequest(result);
         }
 
+        // Roles area
+        [Authorize(AuthenticationSchemes = "Bearer", Roles = "admin")]
+        [HttpPost("AddRoleAdminToUser/{userEmail}")]
+        public async Task<IActionResult> AddRoleAdminToUser(string userEmail)
+        {
+            var result = await _authService.AddRoleAdminToUserAsync(userEmail);
+            if (result != "")
+                return BadRequest(result);
+            return Ok();
+        }
+
+        [Authorize(AuthenticationSchemes = "Bearer", Roles = "admin")]
+        [HttpPost("RemoveRoleFromUser/{userEmail}")]
+        public async Task<IActionResult> RemoveRoleFromUser(string userEmail)
+        {
+            var result = await _authService.RemoveRoleAdminFromUserAsync(userEmail);
+            if (result != "")
+                return BadRequest(result);
+            return Ok();
+        }
+
+        [Authorize(AuthenticationSchemes = "Bearer", Roles = "admin")]
+        [HttpGet("GetUserRoles/{userEmail}")]
+        public async Task<IActionResult> GetUserRoles(string userEmail)
+        {
+            var roles = await _authService.GetUserRolesAsync(userEmail);
+            // if user not found => roles is empty list
+            return Ok(roles);
+        }
+
         // addreses Area:- 
         [Authorize(AuthenticationSchemes = "Bearer")]
         [HttpPost("AddAddress")]

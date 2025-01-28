@@ -17,6 +17,11 @@ namespace SimpleECommerce.Services
         Task<string> SendOtpForResetPassAsync(sendOTPForLoginModel model);
         Task<string> resetPassAsync(resetPassModel model);
 
+        // roles area
+        Task<string> AddRoleAdminToUserAsync(string userEmail);
+        Task<string> RemoveRoleAdminFromUserAsync(string userEmail);
+        Task<IList<string>> GetUserRolesAsync(string userEmail);
+
         // Address management methods
         Task<string> AddAddressToUser(AddressInputModel model);
         Task<IEnumerable<Address>> ShowUserAddresses();

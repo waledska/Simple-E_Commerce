@@ -19,6 +19,7 @@ namespace SimpleECommerce.Controllers
         }
 
         // category [C R U D] APIs
+        [Authorize(AuthenticationSchemes = "Bearer", Roles = "admin")]
         [HttpPost("CreateCategoty")]
         public async Task<IActionResult> CreateCategoty([FromBody] string value)
         {
@@ -35,6 +36,7 @@ namespace SimpleECommerce.Controllers
             return Ok(await _prodService.GetCategoriesAsync());
         }
 
+        [Authorize(AuthenticationSchemes = "Bearer", Roles = "admin")]
         [HttpPut("UpdateCategory")]
         public async Task<IActionResult> UpdateCategory([FromBody] CategoryModel model)
         {
@@ -46,6 +48,7 @@ namespace SimpleECommerce.Controllers
             return Ok(result);
         }
 
+        [Authorize(AuthenticationSchemes = "Bearer", Roles = "admin")]
         [HttpDelete("DeleteCategory")]
         public async Task<IActionResult> DeleteCategory([FromBody] int catId)
         {
@@ -58,6 +61,7 @@ namespace SimpleECommerce.Controllers
 
         // Product APIs
 
+        [Authorize(AuthenticationSchemes = "Bearer", Roles = "admin")]
         [HttpPost("create")]
         public async Task<IActionResult> CreateProduct([FromBody] ProductRequestModel model)
         {
@@ -80,6 +84,7 @@ namespace SimpleECommerce.Controllers
             return Ok(products);
         }
 
+        [Authorize(AuthenticationSchemes = "Bearer", Roles = "admin")]
         [HttpPut("update/{productId}")]
         public async Task<IActionResult> UpdateProduct(int productId, [FromBody] ProductRequestModel model)
         {
@@ -93,6 +98,7 @@ namespace SimpleECommerce.Controllers
             return result != null ? Ok(result) : BadRequest("Product not found or it is deleted.");
         }
 
+        [Authorize(AuthenticationSchemes = "Bearer", Roles = "admin")]
         [HttpDelete("delete/{productId}")]
         public async Task<IActionResult> DeleteProduct(int productId)
         {
@@ -101,6 +107,7 @@ namespace SimpleECommerce.Controllers
         }
 
         // Reactivate Soft-Deleted Product API
+        [Authorize(AuthenticationSchemes = "Bearer", Roles = "admin")]
         [HttpPut("reActivate/{productId}")]
         public async Task<IActionResult> ReactivateVariation(int productId)
         {
@@ -112,7 +119,7 @@ namespace SimpleECommerce.Controllers
         }
 
         // Product Variation APIs
-
+        [Authorize(AuthenticationSchemes = "Bearer", Roles = "admin")]
         [HttpPost("{productId}/variation/add")]
         public async Task<IActionResult> AddVariationForProd(int productId, [FromForm] ProductVariationRequestModel model)
         {
@@ -135,6 +142,7 @@ namespace SimpleECommerce.Controllers
             return Ok(variations);
         }
 
+        [Authorize(AuthenticationSchemes = "Bearer", Roles = "admin")]
         [HttpPut("variation/update/{variationId}")]
         public async Task<IActionResult> UpdateVariationForProd(int variationId, [FromForm] ProductVariationRequestModel model)
         {
@@ -147,6 +155,7 @@ namespace SimpleECommerce.Controllers
             return result != null ? Ok(result) : NotFound("Variation not found or it is deleted.");
         }
 
+        [Authorize(AuthenticationSchemes = "Bearer", Roles = "admin")]
         [HttpDelete("variation/delete/{variationId}")]
         public async Task<IActionResult> DeleteVariationForProd(int variationId)
         {
@@ -174,6 +183,7 @@ namespace SimpleECommerce.Controllers
         }
 
         // Reactivate Soft-Deleted Variation API
+        [Authorize(AuthenticationSchemes = "Bearer", Roles = "admin")]
         [HttpPut("variation/reactivate")]
         public async Task<IActionResult> ReactivateVariation([FromForm] reactivateVariationRequestModel model)
         {
@@ -188,6 +198,7 @@ namespace SimpleECommerce.Controllers
         }
 
         // colors
+        [Authorize(AuthenticationSchemes = "Bearer", Roles = "admin")]
         [HttpPost("AddColor")]
         public async Task<IActionResult> AddNewColor([FromBody] string value)
         {
@@ -213,6 +224,7 @@ namespace SimpleECommerce.Controllers
         }
 
         // sizes
+        [Authorize(AuthenticationSchemes = "Bearer", Roles = "admin")]
         [HttpPost("AddSize")]
         public async Task<IActionResult> AddNewSize([FromBody] string value)
         {

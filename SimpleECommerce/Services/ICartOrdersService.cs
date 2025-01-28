@@ -18,10 +18,10 @@ namespace SimpleECommerce.Services
         Task<string> buyProdAsync(buyProdRequestModel model);
         Task<List<orderWithOutDetails>> GetMyOrdersAsync(); // in the client should make filterationBy orderStatus
         Task<Order> GetOrderDetailsAsync(int orderId);
-        Task<string> deleteOrderbyUserAsync(int orderId); // [In 8 h] // soft delete -> by update order status to Cancelled!
+        Task<string> deleteOrderbyUserAsync(int orderId); // [In 12 h from appSettings in iso format] // soft delete -> by update order status to Cancelled!
 
         //[ForAdmin]
-        Task<List<orderWithOutDetails>> GetAllUsersOrdersAsync(string userId = null,
+        Task<List<Order>> GetAllUsersOrdersAsync(string userId = null,
                                                                 string orderStatus = null,
                                                                 int? orderId = null,
                                                                 string phoneNumber = null,
@@ -29,6 +29,5 @@ namespace SimpleECommerce.Services
 
 
         Task<string> updateOrderStatusAsync(updateOrderStatus model);
-        Task<string> deleteOrderbyAdminAsync(int orderId);
     }
 }

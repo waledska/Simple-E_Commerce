@@ -16,19 +16,23 @@ namespace SimpleECommerce.Services
         private readonly IProdService _prodService;
         private readonly ILogger<CartOrdersService> _logger;
         private readonly orderStatuses _orderStatusData;
+        private readonly TimeSpan _cancellationTimeLimit;
 
         public CartOrdersService(ApplicationDbContext dbContext
         , IAuthService authService
         , IProdService prodService
         , ILogger<CartOrdersService> logger
-        , IOptions<orderStatuses> orderStatusDataOptions)
+        , IOptions<orderStatuses> orderStatusDataOptions
+        , IOptions<AmountOfTimeUserAbleToCancellOrder> amountOfTimeToCancellOptions)
         {
             _dbContext = dbContext;
             _authService = authService;
             _prodService = prodService;
             _logger = logger;
             _orderStatusData = orderStatusDataOptions.Value;
+            _cancellationTimeLimit = System.Xml.XmlConvert.ToTimeSpan(amountOfTimeToCancellOptions.Value.timePeriod);
         }
+
         // cartRow[C R U D]
         //[forUser => authentication]
         public async Task<string> addItemToMyCartAsync(addItemToCartModel model)
@@ -338,35 +342,140 @@ namespace SimpleECommerce.Services
 
         public async Task<List<orderWithOutDetails>> GetMyOrdersAsync()
         {
-            throw new NotImplementedException();
+            var currentUserId = _authService.getUserId();
+            var result = await _dbContext.Orders
+                .AsNoTracking()
+                .Where(o => o.UserId == currentUserId)
+                .OrderByDescending(o => o.DateOfOrder)
+                .Select(o => new orderWithOutDetails
+                {
+                    orderId = o.Id,
+                    UserId = o.UserId,
+                    DateOfOrder = o.DateOfOrder,
+                    OrderAddress = new simpleAddressDetails
+                    {
+                        addressId = o.Address.Id,
+                        city = o.Address.City,
+                        country = o.Address.Country,
+                        streetName = o.Address.StreetName
+                    },
+                    OrderStatus = o.OrderStatus,
+                    TotalAmount = o.TotalAmount
+                })
+                .ToListAsync();
+
+            return result;
         }
 
         public async Task<Order> GetOrderDetailsAsync(int orderId)
         {
-            throw new NotImplementedException();
+            var currentUserId = _authService.getUserId();
+
+            var result = await _dbContext.Orders
+                .AsNoTracking()
+                .Include(o => o.Address)
+                .Include(o => o.OrderRows)
+                .FirstOrDefaultAsync(o => o.UserId == currentUserId && o.Id == orderId);
+
+            return result;
         }
 
         public async Task<string> deleteOrderbyUserAsync(int orderId)
         {
-            throw new NotImplementedException();
+            var currentUserId = _authService.getUserId();
+            var order = await _dbContext.Orders.FirstOrDefaultAsync(o => o.Id == orderId && o.UserId == currentUserId);
+            if (order == null)
+                return "invalid user ID!";
+            if (DateTime.UtcNow - order.DateOfOrder > _cancellationTimeLimit)
+                return "the time limit for cancelling current order is Finished! you can't cancel only call customer support";
+
+            order.OrderStatus = _orderStatusData.cancelled;
+            await _dbContext.SaveChangesAsync();
+
+            return "";
         }
 
         //[ForAdmin]
-        public async Task<List<orderWithOutDetails>> GetAllUsersOrdersAsync(string userId = null,
+        public async Task<List<Order>> GetAllUsersOrdersAsync(string userId = null,
                     string orderStatus = null,
                     int? orderId = null,
                     string phoneNumber = null,
                     string userName = null)
         {
-            throw new NotImplementedException();
+            // base query If all filteration attributes with null values
+            var baseQuery = _dbContext.Orders
+                .AsNoTracking()
+                .Include(o => o.OrderRows)
+                .Include(o => o.Address)
+                .AsQueryable();
+
+            if (!string.IsNullOrEmpty(userId))
+                baseQuery = baseQuery.Where(o => o.UserId == userId);
+
+            if (orderId.HasValue)
+                baseQuery = baseQuery.Where(o => o.Id == orderId);
+
+            if (!string.IsNullOrEmpty(orderStatus))
+                baseQuery = baseQuery.Where(o => o.OrderStatus == orderStatus);
+
+            if (!string.IsNullOrEmpty(phoneNumber))
+                baseQuery = baseQuery.Where(o => o.Address.MobileNumber.Contains(phoneNumber));
+
+            if (!string.IsNullOrEmpty(userName))
+            {
+                // var get the userId from his name
+                var userIds = await _dbContext.Users
+                .AsNoTracking()
+                .Where(u => u.UserName.Contains(userName))
+                .Select(u => u.Id)
+                .ToListAsync();
+                baseQuery = baseQuery.Where(o => userIds.Contains(o.UserId));
+            }
+
+            return await baseQuery
+                .OrderByDescending(o => o.DateOfOrder)
+                .ToListAsync();
         }
+        // you can delete from here by set orderStatus To Cancelled 
         public async Task<string> updateOrderStatusAsync(updateOrderStatus model)
         {
-            throw new NotImplementedException();
-        }
-        public async Task<string> deleteOrderbyAdminAsync(int orderId)
-        {
-            throw new NotImplementedException();
+            var order = await _dbContext.Orders.FirstOrDefaultAsync(o => o.Id == model.orderId);
+            if (order == null)
+                return "invalid order Id there is no orders with this id!";
+            if (order.OrderStatus == model.orderStatus)
+                return "this status is already assigned for this order!";
+
+            var orderStatus = "";
+
+            switch (model.orderStatus.ToLower())
+            {
+                case "pending":
+                    orderStatus = "Pending";
+                    break;
+                case "processing":
+                    orderStatus = "Processing";
+                    break;
+                case "shipped":
+                    orderStatus = "Shipped";
+                    break;
+                case "delivered":
+                    orderStatus = "Delivered";
+                    break;
+                case "cancelled":
+                    orderStatus = "Cancelled";
+                    break;
+                case "returned":
+                    orderStatus = "Returned";
+                    break;
+                default:
+                    return "Unknown Status";
+            }
+
+            // update order statuss
+            order.OrderStatus = orderStatus;
+            await _dbContext.SaveChangesAsync();
+
+            return "";
         }
     }
 }
